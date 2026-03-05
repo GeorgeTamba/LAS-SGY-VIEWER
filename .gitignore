@@ -1,0 +1,11 @@
+# Ignore my custom virtual environment name
+myenv/
+
+# Standard patterns to catch other common names
+venv/
+.env
+env/
+
+# Ignore large data files
+*.sgy
+*.las
