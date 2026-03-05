@@ -1,6 +1,15 @@
 [theme]
+# A vibrant teal for buttons and sliders
 primaryColor = "#00FFCC"
+
+# Deep dark background for the main area
 backgroundColor = "#0E1117"
+
+# Slightly lighter dark for the sidebar (Header Info)
 secondaryBackgroundColor = "#161B22"
-textColor = "#FFFFFF"
+
+# Clean white for all text
+textColor = "#ffffff"
+
+# Modern professional font
 font = "sans serif"

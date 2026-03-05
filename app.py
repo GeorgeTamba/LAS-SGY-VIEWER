@@ -129,3 +129,5 @@ else:
         st.container(border=True).write("HEADER INFORMATION (Will appear after upload)")
     with col_right:
         st.container(border=True).write("CURVE INFORMATION & SEISMIC VISUALIZATION (Will appear after upload)")
+
+        
