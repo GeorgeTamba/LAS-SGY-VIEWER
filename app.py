@@ -111,18 +111,56 @@ elif st.session_state.page == 'well_log':
         with st.container(key="las_curves"):
             st.subheader("Well Log Curves")
             depth_col = next((c for c in las.keys() if c.upper() in ['DEPT', 'DEPTH']), None)
+            
             if depth_col:
-                curves = [c for c in las.keys() if c != depth_col]
-                fig, axes = plt.subplots(1, len(curves), figsize=(len(curves)*3, 10), sharey=True)
-                if len(curves) == 1: axes = [axes]
-                for i, curve in enumerate(curves):
-                    axes[i].plot(df[curve], df[depth_col], lw=1)
-                    axes[i].set_title(curve, fontweight='bold')
-                    axes[i].grid(True, alpha=0.2)
-                plt.gca().invert_yaxis()
-                st.pyplot(fig)
+                available_curves = [c for c in las.keys() if c != depth_col]
+                num_curves = len(available_curves)
+                cols_per_row = 5
+                
+                # Calculate how many rows we need
+                num_rows = (num_curves + cols_per_row - 1) // cols_per_row
+                depth_unit = las.curves[depth_col].unit if depth_col in las.curves else "m"
+
+                for r in range(num_rows):
+                    start_idx = r * cols_per_row
+                    end_idx = min(start_idx + cols_per_row, num_curves)
+                    row_curves = available_curves[start_idx:end_idx]
+                    
+                    # 1. THE STRETCH-FIX: Constrain the width using Streamlit columns
+                    # This ensures the first column only takes up the space needed for the plots
+                    display_cols = st.columns([len(row_curves), cols_per_row - len(row_curves) + 0.1])
+                    
+                    with display_cols[0]:
+                        # 2. Adjust figsize proportionally
+                        row_width = len(row_curves) * 3.5 
+                        fig, axes = plt.subplots(1, len(row_curves), figsize=(row_width, 10), sharey=True)
+                        
+                        if len(row_curves) == 1: 
+                            axes = [axes]
+
+                        for i, curve in enumerate(row_curves):
+                            # Using your preferred Cyan color from the revision
+                            axes[i].plot(df[curve], df[depth_col], color='#00FFFF', lw=1.5)
+                            axes[i].set_title(curve, fontweight='bold', color='white', pad=15)
+                            axes[i].grid(True, linestyle='--', alpha=0.15, color='white')
+                            
+                            if 'RES' in curve.upper() and df[curve].min() > 0:
+                                axes[i].set_xscale('log')
+                        
+                        # Style axis labels and ticks for dark theme
+                        axes[0].set_ylabel(f"Depth ({depth_unit})", color='white', fontweight='bold')
+                        for ax in axes:
+                            ax.tick_params(colors='white')
+                            ax.set_facecolor('none') # Transparent axes
+                        
+                        plt.gca().invert_yaxis()
+                        fig.patch.set_alpha(0) # Transparent figure background
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        plt.close(fig)
+                    
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error reading LAS: {e}")
 
 # PAGE C: SEISMIC VIEW
 elif st.session_state.page == 'seismic':
