@@ -171,42 +171,87 @@ elif st.session_state.page == 'seismic':
 
     sgy_file = st.session_state.uploaded_data
     temp_path = f"temp_{sgy_file.name}"
-    with open(temp_path, "wb") as f: f.write(sgy_file.getbuffer())
+    with open(temp_path, "wb") as f: 
+        f.write(sgy_file.getbuffer())
 
     try:
-        with segyio.open(temp_path, "r", ignore_geometry=False) as f:
-            # SEISMIC INFORMATION BANNER
+        # 1. Open with ignore_geometry=True to safely read headers first
+        with segyio.open(temp_path, "r", ignore_geometry=True) as f:
+            
+            # Check for 3D Geometry
+            is_3d = False
+            try:
+                # We try a quick check to see if ilines exist
+                with segyio.open(temp_path, "r", ignore_geometry=False) as f_check:
+                    if len(f_check.ilines) > 1 and len(f_check.xlines) > 1:
+                        is_3d = True
+                        ilines = f_check.ilines
+                        xlines = f_check.xlines
+                        samples = f_check.samples
+            except:
+                is_3d = False
+
+            # --- SEISMIC INFORMATION BANNER ---
             with st.container(key="seismic_info"):
                 st.subheader("SEISMIC INFORMATIONS")
                 cols = st.columns(3)
-                cols[0].write(f"**Inlines:** {len(f.ilines)}")
-                cols[1].write(f"**Crosslines:** {len(f.xlines)}")
-                cols[2].write(f"**Samples:** {len(f.samples)}")
+                if is_3d:
+                    cols[0].write(f"**Mode:** 3D Data")
+                    cols[1].write(f"**Inlines:** {len(ilines)}")
+                    cols[2].write(f"**Crosslines:** {len(xlines)}")
+                else:
+                    cols[0].write(f"**Mode:** 2D Data")
+                    cols[1].write(f"**Traces:** {f.tracecount}")
+                    cols[2].write(f"**Samples:** {len(f.samples)}")
 
-                # SEISMIC PLOT SECTION (Inline + Crossline per your answer)
+            # --- SEISMIC PLOT SECTION ---
             with st.container(key="seismic_plots"):
                 st.subheader("SEISMIC PLOT")
-                mid_il = f.ilines[len(f.ilines)//2]
-                mid_xl = f.xlines[len(f.xlines)//2]
                 
-                fig, axes = plt.subplots(2, 1, figsize=(16, 20))
-                
-                # Inline Plot
-                data_il = f.iline[mid_il].T
-                vm_il = np.percentile(np.absolute(data_il), 98)
-                axes[0].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
-                            extent=[f.xlines[0], f.xlines[-1], f.samples[-1], f.samples[0]])
-                axes[0].set_title(f"Seismic Inline: {mid_il}")
+                if is_3d:
+                    # Rerun the 3D logic specifically
+                    with segyio.open(temp_path, "r", ignore_geometry=False) as f3d:
+                        mid_il = f3d.ilines[len(f3d.ilines)//2]
+                        mid_xl = f3d.xlines[len(f3d.xlines)//2]
+                        
+                        fig, axes = plt.subplots(2, 1, figsize=(16, 20))
+                        
+                        data_il = f3d.iline[mid_il].T
+                        vm_il = np.percentile(np.absolute(data_il), 98)
+                        axes[0].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
+                                       extent=[f3d.xlines[0], f3d.xlines[-1], f3d.samples[-1], f3d.samples[0]])
+                        axes[0].set_title(f"3D Inline: {mid_il}", color='white', fontweight='bold')  
+                        axes[0].tick_params(axis='both', colors='white') 
+                        axes[0].set_xlabel("Crosslines", color='white')
 
-                # Crossline Plot
-                data_xl = f.xline[mid_xl].T
-                vm_xl = np.percentile(np.absolute(data_xl), 98)
-                axes[1].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
-                            extent=[f.ilines[0], f.ilines[-1], f.samples[-1], f.samples[0]])
-                axes[1].set_title(f"Seismic Crossline: {mid_xl}")
-                
+                        data_xl = f3d.xline[mid_xl].T
+                        vm_xl = np.percentile(np.absolute(data_xl), 98)
+                        axes[1].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
+                                       extent=[f3d.ilines[0], f3d.ilines[-1], f3d.samples[-1], f3d.samples[0]])
+                        axes[1].set_title(f"3D Crossline: {mid_xl}", color='white', fontweight='bold')
+                        axes[1].tick_params(axis='both', colors='white')
+                        axes[1].set_xlabel("Inlines", color='white')
+                    
+                else:
+                    # 2D LOGIC: Read all traces as a 2D array
+                    # segyio.tools.collect is the fastest way to grab all traces
+                    data_2d = segyio.tools.collect(f.trace[:]).T
+                    vm_2d = np.percentile(np.absolute(data_2d), 98)
+                    
+                    fig, ax = plt.subplots(figsize=(16, 10))
+                    ax.imshow(data_2d, cmap='RdBu', aspect='auto', vmin=-vm_2d, vmax=vm_2d)
+                    ax.set_title("2D Seismic Section", color='white', fontweight='bold')
+                    ax.set_xlabel("Trace Number", color='white')
+                    ax.set_ylabel("Sample Index", color='white')
+                    
+                    # Style the 2D plot ticks
+                    ax.tick_params(colors='white')
+
+                fig.patch.set_alpha(0)
                 plt.tight_layout()
                 st.pyplot(fig)
+                plt.close(fig)
+
     except Exception as e:
         st.error(f"Error reading SGY: {e}")
     finally:
