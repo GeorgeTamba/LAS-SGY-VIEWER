@@ -140,9 +140,9 @@ elif st.session_state.page == 'well_log':
 
                         for i, curve in enumerate(row_curves):
                             # Using your preferred Cyan color from the revision
-                            axes[i].plot(df[curve], df[depth_col], color='#00FFFF', lw=1.5)
+                            axes[i].plot(df[curve], df[depth_col], color="#0028B6", lw=1.5)
                             axes[i].set_title(curve, fontweight='bold', color='white', pad=15)
-                            axes[i].grid(True, linestyle='--', alpha=0.15, color='white')
+                            axes[i].grid(True, linestyle='-', alpha=0.5, color='#000000')
                             
                             if 'RES' in curve.upper() and df[curve].min() > 0:
                                 axes[i].set_xscale('log')
@@ -151,7 +151,7 @@ elif st.session_state.page == 'well_log':
                         axes[0].set_ylabel(f"Depth ({depth_unit})", color='white', fontweight='bold')
                         for ax in axes:
                             ax.tick_params(colors='white')
-                            ax.set_facecolor('none') # Transparent axes
+                            ax.set_facecolor('white') # Transparent axes
                         
                         plt.gca().invert_yaxis()
                         fig.patch.set_alpha(0) # Transparent figure background
@@ -182,7 +182,6 @@ elif st.session_state.page == 'seismic':
                 cols[0].write(f"**Inlines:** {len(f.ilines)}")
                 cols[1].write(f"**Crosslines:** {len(f.xlines)}")
                 cols[2].write(f"**Samples:** {len(f.samples)}")
-                st.markdown('</div>', unsafe_allow_html=True)
 
                 # SEISMIC PLOT SECTION (Inline + Crossline per your answer)
             with st.container(key="seismic_plots"):
@@ -190,7 +189,7 @@ elif st.session_state.page == 'seismic':
                 mid_il = f.ilines[len(f.ilines)//2]
                 mid_xl = f.xlines[len(f.xlines)//2]
                 
-                fig, axes = plt.subplots(2, 1, figsize=(12, 16))
+                fig, axes = plt.subplots(2, 1, figsize=(16, 20))
                 
                 # Inline Plot
                 data_il = f.iline[mid_il].T
