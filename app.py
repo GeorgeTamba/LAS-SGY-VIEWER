@@ -175,21 +175,40 @@ elif st.session_state.page == 'seismic':
 
     try:
         with segyio.open(temp_path, "r", ignore_geometry=False) as f:
+            # SEISMIC INFORMATION BANNER
             with st.container(key="seismic_info"):
-                st.subheader("Seismic Informations")
+                st.subheader("SEISMIC INFORMATIONS")
                 cols = st.columns(3)
                 cols[0].write(f"**Inlines:** {len(f.ilines)}")
                 cols[1].write(f"**Crosslines:** {len(f.xlines)}")
                 cols[2].write(f"**Samples:** {len(f.samples)}")
+                st.markdown('</div>', unsafe_allow_html=True)
 
-            with st.container(key="seismic_plot"):
-                st.subheader("Seismic Plot")
+                # SEISMIC PLOT SECTION (Inline + Crossline per your answer)
+            with st.container(key="seismic_plots"):
+                st.subheader("SEISMIC PLOT")
                 mid_il = f.ilines[len(f.ilines)//2]
-                fig, ax = plt.subplots(figsize=(12, 8))
+                mid_xl = f.xlines[len(f.xlines)//2]
+                
+                fig, axes = plt.subplots(2, 1, figsize=(12, 16))
+                
+                # Inline Plot
                 data_il = f.iline[mid_il].T
-                vm = np.percentile(np.absolute(data_il), 98)
-                ax.imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm, vmax=vm)
+                vm_il = np.percentile(np.absolute(data_il), 98)
+                axes[0].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
+                            extent=[f.xlines[0], f.xlines[-1], f.samples[-1], f.samples[0]])
+                axes[0].set_title(f"Seismic Inline: {mid_il}")
+
+                # Crossline Plot
+                data_xl = f.xline[mid_xl].T
+                vm_xl = np.percentile(np.absolute(data_xl), 98)
+                axes[1].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
+                            extent=[f.ilines[0], f.ilines[-1], f.samples[-1], f.samples[0]])
+                axes[1].set_title(f"Seismic Crossline: {mid_xl}")
+                
+                plt.tight_layout()
                 st.pyplot(fig)
-    except Exception as e: st.error(f"Error: {e}")
+    except Exception as e:
+        st.error(f"Error reading SGY: {e}")
     finally:
         if os.path.exists(temp_path): os.remove(temp_path)
