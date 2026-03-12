@@ -66,27 +66,15 @@ except FileNotFoundError:
     st.warning(f"Background image '{img_file}' not found.")
 
     # --- 2. HELPER FUNCTIONS (THE "BRAIN") ---
-def detect_endianness(path):
-    """Detects the correct byte order to prevent random header numbers."""
-    for endian in ['big', 'little']:
-        try:
-            with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
-                fmt = f.bin[segyio.BinField.Format]
-                ns = f.bin[segyio.BinField.Samples]
-                if 1 <= fmt <= 8 and 0 < ns < 100000 and f.tracecount > 0:
-                    return endian
-        except Exception:
-            continue
-    return 'big'
-
-def detect_3d_geometry(path, endian):
-    """Diagnoses the exact type and health of the seismic file."""
+# --- 2. HELPER FUNCTIONS (THE "BASIC BRAIN") ---
+def detect_3d_geometry(path):
+    """Diagnoses the seismic file using default Big Endian only."""
     il_field = segyio.TraceField.INLINE_3D
     xl_field = segyio.TraceField.CROSSLINE_3D
     
     try:
         # STEP 1: Try Standard 3D
-        with segyio.open(path, "r", ignore_geometry=False, endian=endian) as f:
+        with segyio.open(path, "r", ignore_geometry=False) as f:
             if len(f.ilines) > 1 and len(f.xlines) > 1:
                 expected = len(f.ilines) * len(f.xlines)
                 actual = f.tracecount
@@ -101,7 +89,7 @@ def detect_3d_geometry(path, endian):
 
     try:
         # STEP 2: Manual Attribute Scan for Broken 3D
-        with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+        with segyio.open(path, "r", ignore_geometry=True) as f:
             ilines = f.attributes(il_field)[:]
             xlines = f.attributes(xl_field)[:]
             
@@ -234,9 +222,8 @@ elif st.session_state.page == 'seismic':
     sgy_path = st.session_state.file_path
 
     try:
-        # 1. RUN DIAGNOSIS
-        endian = detect_endianness(sgy_path)
-        mode, ilines, xlines, samples_list, det_il_field, det_xl_field, diag_msg = detect_3d_geometry(sgy_path, endian)
+        # 1. RUN DIAGNOSIS (No Endianness Detection)
+        mode, ilines, xlines, samples_list, det_il_field, det_xl_field, diag_msg = detect_3d_geometry(sgy_path)
 
         # --- SEISMIC INFORMATION BANNER ---
         with st.container(key="seismic_info"):
@@ -248,7 +235,7 @@ elif st.session_state.page == 'seismic':
                 cols[1].write(f"**Inlines:** {len(ilines)}")
                 cols[2].write(f"**Crosslines:** {len(xlines)}")
             elif mode == '2d':
-                with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f_meta:
+                with segyio.open(sgy_path, "r", ignore_geometry=True) as f_meta:
                     cols[1].write(f"**Traces:** {f_meta.tracecount}")
                     cols[2].write(f"**Samples:** {len(f_meta.samples)}")
             else:
@@ -262,7 +249,7 @@ elif st.session_state.page == 'seismic':
             
             # SLOT 1: Standard 3D (Fast Plotting)
             if mode == 'standard_3d':
-                with segyio.open(sgy_path, "r", ignore_geometry=False, endian=endian) as f3d:
+                with segyio.open(sgy_path, "r", ignore_geometry=False) as f3d:
                     mid_il = f3d.ilines[len(f3d.ilines)//2]
                     mid_xl = f3d.xlines[len(f3d.xlines)//2]
                     
@@ -294,7 +281,7 @@ elif st.session_state.page == 'seismic':
                 
             # SLOT 4: Standard 2D
             elif mode == '2d':
-                with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f2d:
+                with segyio.open(sgy_path, "r", ignore_geometry=True) as f2d:
                     data_2d = segyio.tools.collect(f2d.trace[:]).T
                     vm_2d = np.percentile(np.absolute(data_2d), 98)
                     
