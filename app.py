@@ -68,8 +68,8 @@ except FileNotFoundError:
 # --- 2. STATE MANAGEMENT ---
 if 'page' not in st.session_state:
     st.session_state.page = 'home'
-if 'uploaded_data' not in st.session_state:
-    st.session_state.uploaded_data = None
+if 'file_path' not in st.session_state:
+    st.session_state.file_path = None
 
 # --- 3. PAGE LOGIC ---
 
@@ -78,13 +78,24 @@ if st.session_state.page == 'home':
     st.markdown('<div class="main-title">PUDM WELL LOG AND SEISMIC VIEWER</div>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        uploaded_file = st.file_uploader("", type=['las', 'sgy'], label_visibility="collapsed")
-        st.markdown('<div class="upload-label">Drag and drop files here<br>LAS, SGY</div>', unsafe_allow_html=True)
-        if uploaded_file:
-            ext = uploaded_file.name.split('.')[-1].lower()
-            st.session_state.uploaded_data = uploaded_file
-            st.session_state.page = 'well_log' if ext == 'las' else 'seismic'
-            st.rerun()
+        # Switching from file_uploader to text_input for Big Data handling
+        file_path = st.text_input("", placeholder="Enter local file path (e.g. C:/Data/Seismic.sgy)", label_visibility="collapsed")
+        st.markdown('<div class="upload-label">Enter the full local path to your file<br>LAS, SGY</div>', unsafe_allow_html=True)
+        
+        if file_path:
+            # Clean up the path (remove quotes if user copied as path)
+            clean_path = file_path.strip().strip('"').strip("'")
+            
+            if not os.path.isfile(clean_path):
+                st.error("File not found. Please check the path and ensure the app has access.")
+            else:
+                ext = clean_path.split('.')[-1].lower()
+                if ext not in ['las', 'sgy']:
+                    st.error("Unsupported file type. Please use .las or .sgy files.")
+                else:
+                    st.session_state.file_path = clean_path
+                    st.session_state.page = 'well_log' if ext == 'las' else 'seismic'
+                    st.rerun()
 
 # PAGE B: WELL LOG VIEW
 elif st.session_state.page == 'well_log':
@@ -93,10 +104,10 @@ elif st.session_state.page == 'well_log':
         st.session_state.page = 'home'
         st.rerun()
 
-    las_file = st.session_state.uploaded_data
+    # --- CHANGED: Read directly from local path ---
+    las_path = st.session_state.file_path
     try:
-        raw_content = las_file.read().decode("utf-8")
-        las = lasio.read(raw_content)
+        las = lasio.read(las_path)
         df = las.df().reset_index()
 
         with st.container(key="las_info"):
@@ -169,20 +180,18 @@ elif st.session_state.page == 'seismic':
         st.session_state.page = 'home'
         st.rerun()
 
-    sgy_file = st.session_state.uploaded_data
-    temp_path = f"temp_{sgy_file.name}"
-    with open(temp_path, "wb") as f: 
-        f.write(sgy_file.getbuffer())
+    # --- CHANGED: Use local path directly, no temp files ---
+    sgy_path = st.session_state.file_path
 
     try:
         # 1. Open with ignore_geometry=True to safely read headers first
-        with segyio.open(temp_path, "r", ignore_geometry=True) as f:
+        with segyio.open(sgy_path, "r", ignore_geometry=True) as f:
             
             # Check for 3D Geometry
             is_3d = False
             try:
                 # We try a quick check to see if ilines exist
-                with segyio.open(temp_path, "r", ignore_geometry=False) as f_check:
+                with segyio.open(sgy_path, "r", ignore_geometry=False) as f_check:
                     if len(f_check.ilines) > 1 and len(f_check.xlines) > 1:
                         is_3d = True
                         ilines = f_check.ilines
@@ -210,7 +219,7 @@ elif st.session_state.page == 'seismic':
                 
                 if is_3d:
                     # Rerun the 3D logic specifically
-                    with segyio.open(temp_path, "r", ignore_geometry=False) as f3d:
+                    with segyio.open(sgy_path, "r", ignore_geometry=False) as f3d:
                         mid_il = f3d.ilines[len(f3d.ilines)//2]
                         mid_xl = f3d.xlines[len(f3d.xlines)//2]
                         
@@ -254,5 +263,3 @@ elif st.session_state.page == 'seismic':
 
     except Exception as e:
         st.error(f"Error reading SGY: {e}")
-    finally:
-        if os.path.exists(temp_path): os.remove(temp_path)
