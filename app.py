@@ -65,6 +65,57 @@ try:
 except FileNotFoundError:
     st.warning(f"Background image '{img_file}' not found.")
 
+    # --- 2. HELPER FUNCTIONS (THE "BRAIN") ---
+def detect_endianness(path):
+    """Detects the correct byte order to prevent random header numbers."""
+    for endian in ['big', 'little']:
+        try:
+            with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+                fmt = f.bin[segyio.BinField.Format]
+                ns = f.bin[segyio.BinField.Samples]
+                if 1 <= fmt <= 8 and 0 < ns < 100000 and f.tracecount > 0:
+                    return endian
+        except Exception:
+            continue
+    return 'big'
+
+def detect_3d_geometry(path, endian):
+    """Diagnoses the exact type and health of the seismic file."""
+    il_field = segyio.TraceField.INLINE_3D
+    xl_field = segyio.TraceField.CROSSLINE_3D
+    
+    try:
+        # STEP 1: Try Standard 3D
+        with segyio.open(path, "r", ignore_geometry=False, endian=endian) as f:
+            if len(f.ilines) > 1 and len(f.xlines) > 1:
+                expected = len(f.ilines) * len(f.xlines)
+                actual = f.tracecount
+                if expected == actual:
+                    return ('standard_3d', f.ilines.tolist(), f.xlines.tolist(), f.samples.tolist(), 
+                            il_field, xl_field, "✅ Standard 3D File")
+                else:
+                    return ('nonstandard_3d', f.ilines.tolist(), f.xlines.tolist(), f.samples.tolist(), 
+                            il_field, xl_field, f"⚠️ Irregular 3D (Missing Traces: {expected - actual})")
+    except Exception:
+        pass
+
+    try:
+        # STEP 2: Manual Attribute Scan for Broken 3D
+        with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+            ilines = f.attributes(il_field)[:]
+            xlines = f.attributes(xl_field)[:]
+            
+            unique_il = np.unique(ilines)
+            unique_xl = np.unique(xlines)
+
+            if len(unique_il) > 1 and len(unique_xl) > 1:
+                return ('nonstandard_3d', sorted(unique_il.tolist()), sorted(unique_xl.tolist()), 
+                        f.samples.tolist(), il_field, xl_field, "❌ Broken 3D File (Grid Corrupted)")
+            else:
+                return ('2d', None, None, None, None, None, "📄 2D Seismic File")
+    except Exception:
+        return ('corrupted', None, None, None, None, None, "🚫 Heavily Corrupted (Cannot Parse)")
+
 # --- 2. STATE MANAGEMENT ---
 if 'page' not in st.session_state:
     st.session_state.page = 'home'
@@ -180,71 +231,71 @@ elif st.session_state.page == 'seismic':
         st.session_state.page = 'home'
         st.rerun()
 
-    # --- CHANGED: Use local path directly, no temp files ---
     sgy_path = st.session_state.file_path
 
     try:
-        # 1. Open with ignore_geometry=True to safely read headers first
-        with segyio.open(sgy_path, "r", ignore_geometry=True) as f:
+        # 1. RUN DIAGNOSIS
+        endian = detect_endianness(sgy_path)
+        mode, ilines, xlines, samples_list, det_il_field, det_xl_field, diag_msg = detect_3d_geometry(sgy_path, endian)
+
+        # --- SEISMIC INFORMATION BANNER ---
+        with st.container(key="seismic_info"):
+            st.subheader("SEISMIC INFORMATIONS")
+            cols = st.columns([2, 1, 1])
+            cols[0].write(f"**Analysis:** {diag_msg}")
             
-            # Check for 3D Geometry
-            is_3d = False
-            try:
-                # We try a quick check to see if ilines exist
-                with segyio.open(sgy_path, "r", ignore_geometry=False) as f_check:
-                    if len(f_check.ilines) > 1 and len(f_check.xlines) > 1:
-                        is_3d = True
-                        ilines = f_check.ilines
-                        xlines = f_check.xlines
-                        samples = f_check.samples
-            except:
-                is_3d = False
+            if mode in ['standard_3d', 'nonstandard_3d']:
+                cols[1].write(f"**Inlines:** {len(ilines)}")
+                cols[2].write(f"**Crosslines:** {len(xlines)}")
+            elif mode == '2d':
+                with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f_meta:
+                    cols[1].write(f"**Traces:** {f_meta.tracecount}")
+                    cols[2].write(f"**Samples:** {len(f_meta.samples)}")
+            else:
+                cols[1].write("**Traces:** N/A")
+                cols[2].write("**Samples:** N/A")
 
-            # --- SEISMIC INFORMATION BANNER ---
-            with st.container(key="seismic_info"):
-                st.subheader("SEISMIC INFORMATIONS")
-                cols = st.columns(3)
-                if is_3d:
-                    cols[0].write(f"**Mode:** 3D Data")
-                    cols[1].write(f"**Inlines:** {len(ilines)}")
-                    cols[2].write(f"**Crosslines:** {len(xlines)}")
-                else:
-                    cols[0].write(f"**Mode:** 2D Data")
-                    cols[1].write(f"**Traces:** {f.tracecount}")
-                    cols[2].write(f"**Samples:** {len(f.samples)}")
-
-            # --- SEISMIC PLOT SECTION ---
-            with st.container(key="seismic_plots"):
-                st.subheader("SEISMIC PLOT")
-                
-                if is_3d:
-                    # Rerun the 3D logic specifically
-                    with segyio.open(sgy_path, "r", ignore_geometry=False) as f3d:
-                        mid_il = f3d.ilines[len(f3d.ilines)//2]
-                        mid_xl = f3d.xlines[len(f3d.xlines)//2]
-                        
-                        fig, axes = plt.subplots(2, 1, figsize=(16, 20))
-                        
-                        data_il = f3d.iline[mid_il].T
-                        vm_il = np.percentile(np.absolute(data_il), 98)
-                        axes[0].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
-                                       extent=[f3d.xlines[0], f3d.xlines[-1], f3d.samples[-1], f3d.samples[0]])
-                        axes[0].set_title(f"3D Inline: {mid_il}", color='white', fontweight='bold')  
-                        axes[0].tick_params(axis='both', colors='white') 
-                        axes[0].set_xlabel("Crosslines", color='white')
-
-                        data_xl = f3d.xline[mid_xl].T
-                        vm_xl = np.percentile(np.absolute(data_xl), 98)
-                        axes[1].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
-                                       extent=[f3d.ilines[0], f3d.ilines[-1], f3d.samples[-1], f3d.samples[0]])
-                        axes[1].set_title(f"3D Crossline: {mid_xl}", color='white', fontweight='bold')
-                        axes[1].tick_params(axis='both', colors='white')
-                        axes[1].set_xlabel("Inlines", color='white')
+        # --- SEISMIC PLOT SECTION (TRAFFIC CONTROLLER) ---
+        with st.container(key="seismic_plots"):
+            st.subheader("SEISMIC PLOT")
+            fig = None
+            
+            # SLOT 1: Standard 3D (Fast Plotting)
+            if mode == 'standard_3d':
+                with segyio.open(sgy_path, "r", ignore_geometry=False, endian=endian) as f3d:
+                    mid_il = f3d.ilines[len(f3d.ilines)//2]
+                    mid_xl = f3d.xlines[len(f3d.xlines)//2]
                     
-                else:
-                    # 2D LOGIC: Read all traces as a 2D array
-                    # segyio.tools.collect is the fastest way to grab all traces
-                    data_2d = segyio.tools.collect(f.trace[:]).T
+                    fig, axes = plt.subplots(2, 1, figsize=(16, 20))
+                    
+                    data_il = f3d.iline[mid_il].T
+                    vm_il = np.percentile(np.absolute(data_il), 98)
+                    axes[0].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
+                                   extent=[f3d.xlines[0], f3d.xlines[-1], f3d.samples[-1], f3d.samples[0]])
+                    axes[0].set_title(f"3D Inline: {mid_il}", color='white', fontweight='bold')  
+                    axes[0].tick_params(axis='both', colors='white') 
+                    axes[0].set_xlabel("Crosslines", color='white')
+
+                    data_xl = f3d.xline[mid_xl].T
+                    vm_xl = np.percentile(np.absolute(data_xl), 98)
+                    axes[1].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
+                                   extent=[f3d.ilines[0], f3d.ilines[-1], f3d.samples[-1], f3d.samples[0]])
+                    axes[1].set_title(f"3D Crossline: {mid_xl}", color='white', fontweight='bold')
+                    axes[1].tick_params(axis='both', colors='white')
+                    axes[1].set_xlabel("Inlines", color='white')
+
+            # SLOT 2: Broken/Irregular 3D (Awaiting Step 3)
+            elif mode == 'nonstandard_3d':
+                st.warning("🛠️ Recovery Mode Triggered: The data grid is corrupted. ObsPy reconstruction will be built here in the next step.")
+            
+            # SLOT 3: Unreadable File
+            elif mode == 'corrupted':
+                st.error(diag_msg)
+                
+            # SLOT 4: Standard 2D
+            elif mode == '2d':
+                with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f2d:
+                    data_2d = segyio.tools.collect(f2d.trace[:]).T
                     vm_2d = np.percentile(np.absolute(data_2d), 98)
                     
                     fig, ax = plt.subplots(figsize=(16, 10))
@@ -252,14 +303,13 @@ elif st.session_state.page == 'seismic':
                     ax.set_title("2D Seismic Section", color='white', fontweight='bold')
                     ax.set_xlabel("Trace Number", color='white')
                     ax.set_ylabel("Sample Index", color='white')
-                    
-                    # Style the 2D plot ticks
                     ax.tick_params(colors='white')
 
+            if fig:
                 fig.patch.set_alpha(0)
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
 
     except Exception as e:
-        st.error(f"Error reading SGY: {e}")
+        st.error(f"Seismic Processing Error: {e}")
