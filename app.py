@@ -268,9 +268,10 @@ elif st.session_state.page == 'seismic':
                         il_groups = defaultdict(list)
                         xl_groups = defaultdict(list)
 
+                        # NEW DICTIONARY (Official ObsPy header names)
                         segyio_to_obspy = {
-                            int(segyio.TraceField.INLINE_3D): 'inline_3d',
-                            int(segyio.TraceField.CROSSLINE_3D): 'crossline_3d'
+                            int(segyio.TraceField.INLINE_3D): 'for_3d_poststack_data_this_field_is_for_in_line_number',
+                            int(segyio.TraceField.CROSSLINE_3D): 'for_3d_poststack_data_this_field_is_for_cross_line_number'
                         }
                         il_key = segyio_to_obspy.get(int(det_il_field), 'inline_3d')
                         xl_key = segyio_to_obspy.get(int(det_xl_field), 'crossline_3d')
