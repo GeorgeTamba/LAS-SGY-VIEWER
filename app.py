@@ -146,6 +146,27 @@ elif st.session_state.page == 'well_log':
         with st.container(key="las_info"):
             st.subheader("WELL LOG INFORMATIONS")
             
+            # --- SMART RUN & DEPTH DETECTOR ---
+            run_number = "Unknown"
+            
+            # 1. Hunt for the word "RUN" in the parameters or well block
+            for block in [las.params, las.well]:
+                for item in block:
+                    if 'RUN' in item.mnemonic.upper():
+                        run_number = item.value
+                        break
+                if run_number != "Unknown":
+                    break
+            
+            # 2. Grab the Depth Interval as the ultimate fallback
+            strt = las.well['STRT'].value if 'STRT' in las.well else "N/A"
+            stop = las.well['STOP'].value if 'STOP' in las.well else "N/A"
+            unit = las.well['STRT'].unit if 'STRT' in las.well else "m"
+            
+            # 3. Display a clean UI badge
+            st.info(f"📍 **Logged Interval:** {strt} to {stop} {unit} &nbsp; | &nbsp; **Detected Run:** {run_number}")
+            # ----------------------------------
+            
             # Version Information (~V)
             if las.version:
                 with st.expander("Version Information (~V)"):
