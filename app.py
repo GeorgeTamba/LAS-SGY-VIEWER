@@ -144,13 +144,31 @@ elif st.session_state.page == 'well_log':
         df = las.df().reset_index()
 
         with st.container(key="las_info"):
-            st.subheader("Well Log Informations")
-            cols = st.columns(3)
-            keys = [['STRT', 'STOP', 'STEP'], ['WELL', 'FLD', 'CTRY'], ['DATE', 'LATI', 'LONG']]
-            for i, group in enumerate(keys):
-                for k in group:
-                    val = las.well[k].value if k in las.well else "N/A"
-                    cols[i].write(f"**{k}:** {val}")
+            st.subheader("WELL LOG INFORMATIONS")
+            
+            # Version Information (~V)
+            if las.version:
+                with st.expander("Version Information (~V)"):
+                    for item in las.version:
+                        st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
+            
+            # Well Information (~W)
+            if las.well:
+                with st.expander("Well Information (~W)", expanded=True): # Default open so it doesn't look empty
+                    for item in las.well:
+                        st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
+            
+            # Parameter Information (~P)
+            if las.params:
+                with st.expander("Parameter Information (~P)"):
+                    for item in las.params:
+                        st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
+                        
+            # Other Information (~O)
+            # Note: las.other is usually just a raw string of text/notes, not a dictionary.
+            if las.other:
+                with st.expander("Other Information (~O)"):
+                    st.text(las.other)
 
         with st.container(key="las_curves"):
             st.subheader("Well Log Curves")
