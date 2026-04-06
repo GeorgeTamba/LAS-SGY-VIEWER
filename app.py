@@ -3,9 +3,9 @@ import lasio
 import segyio
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.express as px
 import os
 import base64
-# ObsPy and defaultdict have been officially fired and removed from imports
 
 # --- 1. THEME & STYLING ---
 st.set_page_config(page_title="PUDM Viewer", layout="wide")
@@ -50,9 +50,8 @@ try:
 except FileNotFoundError:
     st.warning(f"Background image '{img_file}' not found.")
 
-# --- 2. HELPER FUNCTIONS (THE "BRAIN") ---
+# --- 2. HELPER FUNCTIONS ---
 def detect_endianness(path):
-    """Detects the correct byte order to prevent random header numbers."""
     for endian in ['big', 'little']:
         try:
             with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
@@ -65,41 +64,38 @@ def detect_endianness(path):
     return 'big'
 
 def detect_3d_geometry(path, endian):
-    """Diagnoses the exact type and health of the seismic file using the detected endianness."""
     il_field = segyio.TraceField.INLINE_3D
     xl_field = segyio.TraceField.CROSSLINE_3D
-    
     try:
-        # STEP 1: Try Standard 3D
         with segyio.open(path, "r", ignore_geometry=False, endian=endian) as f:
             if len(f.ilines) > 1 and len(f.xlines) > 1:
                 expected = len(f.ilines) * len(f.xlines)
                 actual = f.tracecount
                 if expected == actual:
-                    return ('standard_3d', f.ilines.tolist(), f.xlines.tolist(), f.samples.tolist(), 
-                            il_field, xl_field, "✅ Standard 3D File")
+                    return ('standard_3d', f.ilines.tolist(), f.xlines.tolist(), f.samples.tolist(), il_field, xl_field, "✅ Standard 3D File")
                 else:
-                    return ('nonstandard_3d', f.ilines.tolist(), f.xlines.tolist(), f.samples.tolist(), 
-                            il_field, xl_field, f"⚠️ Irregular 3D (Missing Traces: {expected - actual})")
+                    return ('nonstandard_3d', f.ilines.tolist(), f.xlines.tolist(), f.samples.tolist(), il_field, xl_field, f"⚠️ Irregular 3D (Missing Traces: {expected - actual})")
     except Exception:
         pass
-
     try:
-        # STEP 2: Manual Attribute Scan for Broken 3D
         with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
             ilines = f.attributes(il_field)[:]
             xlines = f.attributes(xl_field)[:]
-            
             unique_il = np.unique(ilines)
             unique_xl = np.unique(xlines)
-
             if len(unique_il) > 1 and len(unique_xl) > 1:
-                return ('nonstandard_3d', sorted(unique_il.tolist()), sorted(unique_xl.tolist()), 
-                        f.samples.tolist(), il_field, xl_field, "❌ Broken 3D File (Polygon / Grid Corrupted)")
+                return ('nonstandard_3d', sorted(unique_il.tolist()), sorted(unique_xl.tolist()), f.samples.tolist(), il_field, xl_field, "❌ Broken 3D File (Polygon / Grid Corrupted)")
             else:
                 return ('2d', None, None, None, None, None, "📄 2D Seismic File")
     except Exception:
         return ('corrupted', None, None, None, None, None, "🚫 Heavily Corrupted (Cannot Parse)")
+
+# --- STATE CALLBACKS FOR UI BUTTONS ---
+def set_val(key, val):
+    st.session_state[key] = val
+
+def add_val(key, delta, min_val, max_val):
+    st.session_state[key] = max(min_val, min(max_val, st.session_state[key] + delta))
 
 # --- 3. STATE MANAGEMENT ---
 if 'page' not in st.session_state:
@@ -116,7 +112,6 @@ if st.session_state.page == 'home':
     with col2:
         file_path = st.text_input("", placeholder="Enter local file path (e.g. C:/Data/Seismic.sgy)", label_visibility="collapsed")
         st.markdown('<div class="upload-label">Enter the full local path to your file<br>LAS, SGY</div>', unsafe_allow_html=True)
-        
         if file_path:
             clean_path = file_path.strip().strip('"').strip("'")
             if not os.path.isfile(clean_path):
@@ -141,55 +136,39 @@ elif st.session_state.page == 'well_log':
     try:
         las = lasio.read(las_path)
         df = las.df().reset_index()
-
         with st.container(key="las_info"):
             st.subheader("WELL LOG INFORMATIONS")
-            
-            # --- SMART RUN & DEPTH DETECTOR ---
             run_number = "Unknown"
-            
             for block in [las.params, las.well]:
                 for item in block:
                     if 'RUN' in item.mnemonic.upper():
                         run_number = item.value
                         break
-                if run_number != "Unknown":
-                    break
-            
+                if run_number != "Unknown": break
             strt = las.well['STRT'].value if 'STRT' in las.well else "N/A"
             stop = las.well['STOP'].value if 'STOP' in las.well else "N/A"
             unit = las.well['STRT'].unit if 'STRT' in las.well else "m"
-            
             st.info(f"📍 **Logged Interval:** {strt} to {stop} {unit} &nbsp; | &nbsp; **Detected Run:** {run_number}")
             
             if las.version:
                 with st.expander("Version Information (~V)"):
-                    for item in las.version:
-                        st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
-            
+                    for item in las.version: st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
             if las.well:
                 with st.expander("Well Information (~W)", expanded=True):
-                    for item in las.well:
-                        st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
-            
+                    for item in las.well: st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
             if las.params:
                 with st.expander("Parameter Information (~P)"):
-                    for item in las.params:
-                        st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
-                        
+                    for item in las.params: st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
             if las.other:
-                with st.expander("Other Information (~O)"):
-                    st.text(las.other)
+                with st.expander("Other Information (~O)"): st.text(las.other)
 
         with st.container(key="las_curves"):
             st.subheader("Well Log Curves")
             depth_col = next((c for c in las.keys() if c.upper() in ['DEPT', 'DEPTH']), None)
-            
             if depth_col:
                 available_curves = [c for c in las.keys() if c != depth_col]
                 num_curves = len(available_curves)
                 cols_per_row = 5
-                
                 num_rows = (num_curves + cols_per_row - 1) // cols_per_row
                 depth_unit = las.curves[depth_col].unit if depth_col in las.curves else "m"
 
@@ -197,32 +176,25 @@ elif st.session_state.page == 'well_log':
                     start_idx = r * cols_per_row
                     end_idx = min(start_idx + cols_per_row, num_curves)
                     row_curves = available_curves[start_idx:end_idx]
-                    
                     display_cols = st.columns([len(row_curves), cols_per_row - len(row_curves) + 0.1])
-                    
                     with display_cols[0]:
                         row_width = len(row_curves) * 3.5 
                         fig, axes = plt.subplots(1, len(row_curves), figsize=(row_width, 10), sharey=True)
                         if len(row_curves) == 1: axes = [axes]
-
                         for i, curve in enumerate(row_curves):
                             axes[i].plot(df[curve], df[depth_col], color="#0028B6", lw=1.5)
                             axes[i].set_title(curve, fontweight='bold', color='white', pad=15)
                             axes[i].grid(True, linestyle='-', alpha=0.5, color='#000000')
-                            if 'RES' in curve.upper() and df[curve].min() > 0:
-                                axes[i].set_xscale('log')
-                        
+                            if 'RES' in curve.upper() and df[curve].min() > 0: axes[i].set_xscale('log')
                         axes[0].set_ylabel(f"Depth ({depth_unit})", color='white', fontweight='bold')
                         for ax in axes:
                             ax.tick_params(colors='white')
                             ax.set_facecolor('white') 
-                        
                         plt.gca().invert_yaxis()
                         fig.patch.set_alpha(0) 
                         plt.tight_layout()
                         st.pyplot(fig)
                         plt.close(fig)
-                    
     except Exception as e:
         st.error(f"Error reading LAS: {e}")
 
@@ -236,16 +208,13 @@ elif st.session_state.page == 'seismic':
     sgy_path = st.session_state.file_path
 
     try:
-        # 1. RUN DIAGNOSIS
         endian = detect_endianness(sgy_path)
         mode, ilines, xlines, samples_list, det_il_field, det_xl_field, diag_msg = detect_3d_geometry(sgy_path, endian)
 
-        # --- SEISMIC INFORMATION BANNER ---
         with st.container(key="seismic_info"):
             st.subheader("SEISMIC INFORMATIONS")
             cols = st.columns([2, 1, 1])
             cols[0].write(f"**Analysis:** {diag_msg}")
-            
             if mode in ['standard_3d', 'nonstandard_3d']:
                 cols[1].write(f"**Inlines:** {len(ilines)}")
                 cols[2].write(f"**Crosslines:** {len(xlines)}")
@@ -257,127 +226,158 @@ elif st.session_state.page == 'seismic':
                 cols[1].write("**Traces:** N/A")
                 cols[2].write("**Samples:** N/A")
 
-        # --- SEISMIC PLOT SECTION (TRAFFIC CONTROLLER) ---
         with st.container(key="seismic_plots"):
             st.subheader("SEISMIC PLOT")
-            fig = None
             
-            # SLOT 1: Standard 3D (Fast Plotting)
+            # --- SLOT 1: Standard 3D ---
             if mode == 'standard_3d':
                 with segyio.open(sgy_path, "r", ignore_geometry=False, endian=endian) as f3d:
-                    mid_il = f3d.ilines[len(f3d.ilines)//2]
-                    mid_xl = f3d.xlines[len(f3d.xlines)//2]
+                    if 'idx_il_1' not in st.session_state: st.session_state.idx_il_1 = len(ilines) // 2
+                    if 'idx_xl_1' not in st.session_state: st.session_state.idx_xl_1 = len(xlines) // 2
                     
-                    fig, axes = plt.subplots(2, 1, figsize=(16, 20))
-                    
+                    # --- INLINE SECTION ---
+                    st.markdown("### 🎯 Inline Target")
+                    c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
+                    c1.button("⏮️", key="start_il1", on_click=set_val, args=('idx_il_1', 0))
+                    c2.button("◀️", key="prev_il1", on_click=add_val, args=('idx_il_1', -1, 0, len(ilines)-1))
+                    c3.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_1', label_visibility="collapsed")
+                    c4.button("▶️", key="next_il1", on_click=add_val, args=('idx_il_1', 1, 0, len(ilines)-1))
+                    c5.button("⏭️", key="end_il1", on_click=set_val, args=('idx_il_1', len(ilines)-1))
+
+                    mid_il = ilines[st.session_state.idx_il_1]
                     data_il = f3d.iline[mid_il].T
                     vm_il = np.percentile(np.absolute(data_il), 98)
-                    axes[0].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
-                                   extent=[f3d.xlines[0], f3d.xlines[-1], f3d.samples[-1], f3d.samples[0]])
-                    axes[0].set_title(f"3D Inline: {mid_il}", color='white', fontweight='bold')  
-                    axes[0].tick_params(axis='both', colors='white') 
-                    axes[0].set_xlabel("Crosslines", color='white')
-                    axes[0].set_ylabel("Depth/Time", color='white')
+                    fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
+                                       x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}")
+                    fig_il.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_il.update_traces(zsmooth='best')
+                    st.plotly_chart(fig_il, use_container_width=True, height=700)
 
+                    st.markdown("---") # Visual Separator
+
+                    # --- CROSSLINE SECTION ---
+                    st.markdown("### 🎯 Crossline Target")
+                    c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
+                    c1.button("⏮️", key="start_xl1", on_click=set_val, args=('idx_xl_1', 0))
+                    c2.button("◀️", key="prev_xl1", on_click=add_val, args=('idx_xl_1', -1, 0, len(xlines)-1))
+                    c3.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_1', label_visibility="collapsed")
+                    c4.button("▶️", key="next_xl1", on_click=add_val, args=('idx_xl_1', 1, 0, len(xlines)-1))
+                    c5.button("⏭️", key="end_xl1", on_click=set_val, args=('idx_xl_1', len(xlines)-1))
+
+                    mid_xl = xlines[st.session_state.idx_xl_1]
                     data_xl = f3d.xline[mid_xl].T
                     vm_xl = np.percentile(np.absolute(data_xl), 98)
-                    axes[1].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
-                                   extent=[f3d.ilines[0], f3d.ilines[-1], f3d.samples[-1], f3d.samples[0]])
-                    axes[1].set_title(f"3D Crossline: {mid_xl}", color='white', fontweight='bold')
-                    axes[1].tick_params(axis='both', colors='white')
-                    axes[1].set_xlabel("Inlines", color='white')
-                    axes[1].set_ylabel("Depth/Time", color='white')
+                    fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
+                                       x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}")
+                    fig_xl.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_xl.update_traces(zsmooth='best')
+                    st.plotly_chart(fig_xl, use_container_width=True, height=700)
 
-            # SLOT 2: Nonstandard 3D (The Enterprise Grid Padder)
+            # --- SLOT 2: Nonstandard 3D (Enterprise Grid Padder) ---
             elif mode == 'nonstandard_3d':
                 with st.spinner(f"🛠️ Reconstructing Polygon Grid with Native Padding..."):
                     try:
                         with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f:
-                            # 1. Grab all headers instantly in bulk
+                            if 'idx_il_2' not in st.session_state: st.session_state.idx_il_2 = len(ilines) // 2
+                            if 'idx_xl_2' not in st.session_state: st.session_state.idx_xl_2 = len(xlines) // 2
+                            
                             all_il = f.attributes(det_il_field)[:]
                             all_xl = f.attributes(det_xl_field)[:]
-                            
-                            mid_il = ilines[len(ilines)//2]
-                            mid_xl = xlines[len(xlines)//2]
-                            
-                            # 2. Build fast lookup dictionaries for index matching
                             xl_to_idx = {val: i for i, val in enumerate(xlines)}
                             il_to_idx = {val: i for i, val in enumerate(ilines)}
-                            
-                            # --- BUILD INLINE SLICE ---
+
+                            # --- INLINE SECTION ---
+                            st.markdown("### 🎯 Recovered Inline Target")
+                            c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
+                            c1.button("⏮️", key="start_il2", on_click=set_val, args=('idx_il_2', 0))
+                            c2.button("◀️", key="prev_il2", on_click=add_val, args=('idx_il_2', -1, 0, len(ilines)-1))
+                            c3.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_2', label_visibility="collapsed")
+                            c4.button("▶️", key="next_il2", on_click=add_val, args=('idx_il_2', 1, 0, len(ilines)-1))
+                            c5.button("⏭️", key="end_il2", on_click=set_val, args=('idx_il_2', len(ilines)-1))
+
+                            mid_il = ilines[st.session_state.idx_il_2]
                             tr_idx_il = np.where(all_il == mid_il)[0]
-                            # Create blank canvas filled with NaN
                             data_il = np.full((len(samples_list), len(xlines)), np.nan)
-                            
-                            # Drop the traces directly into their correct X coordinates
                             for idx in tr_idx_il:
                                 xl_val = all_xl[idx]
                                 if xl_val in xl_to_idx:
                                     data_il[:, xl_to_idx[xl_val]] = f.trace[idx]
-                                    
-                            # --- BUILD CROSSLINE SLICE ---
+
+                            if len(tr_idx_il) > 0:
+                                vm_il = np.nanpercentile(np.absolute(data_il), 98) 
+                                fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
+                                                   x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}")
+                                fig_il.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                                fig_il.update_traces(zsmooth='best')
+                                st.plotly_chart(fig_il, use_container_width=True, height=700)
+
+                            st.markdown("---") # Visual Separator
+
+                            # --- CROSSLINE SECTION ---
+                            st.markdown("### 🎯 Recovered Crossline Target")
+                            c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
+                            c1.button("⏮️", key="start_xl2", on_click=set_val, args=('idx_xl_2', 0))
+                            c2.button("◀️", key="prev_xl2", on_click=add_val, args=('idx_xl_2', -1, 0, len(xlines)-1))
+                            c3.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_2', label_visibility="collapsed")
+                            c4.button("▶️", key="next_xl2", on_click=add_val, args=('idx_xl_2', 1, 0, len(xlines)-1))
+                            c5.button("⏭️", key="end_xl2", on_click=set_val, args=('idx_xl_2', len(xlines)-1))
+
+                            mid_xl = xlines[st.session_state.idx_xl_2]
                             tr_idx_xl = np.where(all_xl == mid_xl)[0]
                             data_xl = np.full((len(samples_list), len(ilines)), np.nan)
-                            
                             for idx in tr_idx_xl:
                                 il_val = all_il[idx]
                                 if il_val in il_to_idx:
                                     data_xl[:, il_to_idx[il_val]] = f.trace[idx]
-
-                            # Plotting Logic
-                            nplots = (1 if len(tr_idx_il) > 0 else 0) + (1 if len(tr_idx_xl) > 0 else 0)
-                            if nplots > 0:
-                                fig, axes = plt.subplots(nplots, 1, figsize=(16, 10 * nplots))
-                                if nplots == 1: axes = [axes]
-                                
-                                plot_idx = 0
-                                if len(tr_idx_il) > 0:
-                                    # Use nanpercentile so the NaNs don't break the color math!
-                                    vm_il = np.nanpercentile(np.absolute(data_il), 98) 
-                                    axes[plot_idx].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
-                                                   extent=[xlines[0], xlines[-1], samples_list[-1], samples_list[0]])
-                                    axes[plot_idx].set_title(f"Reconstructed 3D Inline: {mid_il}", color='white', fontweight='bold')
-                                    axes[plot_idx].tick_params(colors='white')
-                                    axes[plot_idx].set_xlabel("Crosslines", color='white')
-                                    axes[plot_idx].set_ylabel("Depth/Time", color='white')
-                                    plot_idx += 1
                                     
-                                if len(tr_idx_xl) > 0:
-                                    vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
-                                    axes[plot_idx].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
-                                                   extent=[ilines[0], ilines[-1], samples_list[-1], samples_list[0]])
-                                    axes[plot_idx].set_title(f"Reconstructed 3D Crossline: {mid_xl}", color='white', fontweight='bold')
-                                    axes[plot_idx].tick_params(colors='white')
-                                    axes[plot_idx].set_xlabel("Inlines", color='white')
-                                    axes[plot_idx].set_ylabel("Depth/Time", color='white')
-                            else:
-                                st.error("Recovery Failed: Could not locate traces for the central slices.")
+                            if len(tr_idx_xl) > 0:
+                                vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
+                                fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
+                                                   x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}")
+                                fig_xl.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                                fig_xl.update_traces(zsmooth='best')
+                                st.plotly_chart(fig_xl, use_container_width=True, height=700)
 
                     except Exception as pad_err:
                         st.error(f"Grid Padder Recovery Error: {pad_err}")
             
-            # SLOT 3: Unreadable File
+            # --- SLOT 3: Unreadable File ---
             elif mode == 'corrupted':
                 st.error(diag_msg)
                 
-            # SLOT 4: Standard 2D
+            # --- SLOT 4: Standard 2D (The 100% High-Res Window Chunking) ---
             elif mode == '2d':
                 with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f2d:
-                    data_2d = segyio.tools.collect(f2d.trace[:]).T
-                    vm_2d = np.percentile(np.absolute(data_2d), 98)
+                    total_traces = f2d.tracecount
+                    window_size = 2000 # The RAM Safe Zone
                     
-                    fig, ax = plt.subplots(figsize=(16, 10))
-                    ax.imshow(data_2d, cmap='RdBu', aspect='auto', vmin=-vm_2d, vmax=vm_2d)
-                    ax.set_title("2D Seismic Section", color='white', fontweight='bold')
-                    ax.set_xlabel("Trace Number", color='white')
-                    ax.set_ylabel("Sample Index", color='white')
-                    ax.tick_params(colors='white')
+                    if 'idx_trace_4' not in st.session_state: st.session_state.idx_trace_4 = total_traces // 2
+                    
+                    st.markdown("### 🎯 Trace Window Navigation (2,000 Traces per page)")
+                    st.markdown("**Center Trace Sniper**")
+                    c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
+                    
+                    step = window_size // 2 # Move half a window per click for smooth panning
+                    c1.button("⏮️ Start", key="start_tr4", on_click=set_val, args=('idx_trace_4', 0))
+                    c2.button("◀️ Pan Left", key="prev_tr4", on_click=add_val, args=('idx_trace_4', -step, 0, total_traces-1))
+                    c3.number_input("Target", min_value=0, max_value=total_traces-1, key='idx_trace_4', label_visibility="collapsed")
+                    c4.button("Pan Right ▶️", key="next_tr4", on_click=add_val, args=('idx_trace_4', step, 0, total_traces-1))
+                    c5.button("End ⏭️", key="end_tr4", on_click=set_val, args=('idx_trace_4', total_traces-1))
 
-            if fig:
-                fig.patch.set_alpha(0)
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close(fig)
+                    # Window Extraction Logic (NO Decimation)
+                    center_t = st.session_state.idx_trace_4
+                    start_t = max(0, center_t - (window_size // 2))
+                    end_t = min(total_traces, center_t + (window_size // 2))
+                    
+                    data_2d = segyio.tools.collect(f2d.trace[start_t:end_t]).T
+                    vm_2d = np.percentile(np.absolute(data_2d), 98)
+                    x_axis = np.arange(start_t, end_t)
+                    
+                    fig_2d = px.imshow(data_2d, color_continuous_scale='RdBu', range_color=[-vm_2d, vm_2d],
+                                       x=x_axis, y=f2d.samples, aspect='auto', title=f"2D Seismic Section: Traces {start_t} to {end_t} (100% Resolution)")
+                    fig_2d.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_2d.update_traces(zsmooth='best')
+                    st.plotly_chart(fig_2d, use_container_width=True, height=700)
 
     except Exception as e:
         st.error(f"Seismic Processing Error: {e}")
