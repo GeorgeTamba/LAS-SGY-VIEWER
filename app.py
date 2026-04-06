@@ -5,8 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import base64
-from obspy import read as obspy_read
-from collections import defaultdict
+# ObsPy and defaultdict have been officially fired and removed from imports
 
 # --- 1. THEME & STYLING ---
 st.set_page_config(page_title="PUDM Viewer", layout="wide")
@@ -96,7 +95,7 @@ def detect_3d_geometry(path, endian):
 
             if len(unique_il) > 1 and len(unique_xl) > 1:
                 return ('nonstandard_3d', sorted(unique_il.tolist()), sorted(unique_xl.tolist()), 
-                        f.samples.tolist(), il_field, xl_field, "❌ Broken 3D File (Grid Corrupted)")
+                        f.samples.tolist(), il_field, xl_field, "❌ Broken 3D File (Polygon / Grid Corrupted)")
             else:
                 return ('2d', None, None, None, None, None, "📄 2D Seismic File")
     except Exception:
@@ -149,7 +148,6 @@ elif st.session_state.page == 'well_log':
             # --- SMART RUN & DEPTH DETECTOR ---
             run_number = "Unknown"
             
-            # 1. Hunt for the word "RUN" in the parameters or well block
             for block in [las.params, las.well]:
                 for item in block:
                     if 'RUN' in item.mnemonic.upper():
@@ -158,35 +156,27 @@ elif st.session_state.page == 'well_log':
                 if run_number != "Unknown":
                     break
             
-            # 2. Grab the Depth Interval as the ultimate fallback
             strt = las.well['STRT'].value if 'STRT' in las.well else "N/A"
             stop = las.well['STOP'].value if 'STOP' in las.well else "N/A"
             unit = las.well['STRT'].unit if 'STRT' in las.well else "m"
             
-            # 3. Display a clean UI badge
             st.info(f"📍 **Logged Interval:** {strt} to {stop} {unit} &nbsp; | &nbsp; **Detected Run:** {run_number}")
-            # ----------------------------------
             
-            # Version Information (~V)
             if las.version:
                 with st.expander("Version Information (~V)"):
                     for item in las.version:
                         st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
             
-            # Well Information (~W)
             if las.well:
-                with st.expander("Well Information (~W)", expanded=True): # Default open so it doesn't look empty
+                with st.expander("Well Information (~W)", expanded=True):
                     for item in las.well:
                         st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
             
-            # Parameter Information (~P)
             if las.params:
                 with st.expander("Parameter Information (~P)"):
                     for item in las.params:
                         st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
                         
-            # Other Information (~O)
-            # Note: las.other is usually just a raw string of text/notes, not a dictionary.
             if las.other:
                 with st.expander("Other Information (~O)"):
                     st.text(las.other)
@@ -287,6 +277,7 @@ elif st.session_state.page == 'seismic':
                     axes[0].set_title(f"3D Inline: {mid_il}", color='white', fontweight='bold')  
                     axes[0].tick_params(axis='both', colors='white') 
                     axes[0].set_xlabel("Crosslines", color='white')
+                    axes[0].set_ylabel("Depth/Time", color='white')
 
                     data_xl = f3d.xline[mid_xl].T
                     vm_xl = np.percentile(np.absolute(data_xl), 98)
@@ -295,66 +286,75 @@ elif st.session_state.page == 'seismic':
                     axes[1].set_title(f"3D Crossline: {mid_xl}", color='white', fontweight='bold')
                     axes[1].tick_params(axis='both', colors='white')
                     axes[1].set_xlabel("Inlines", color='white')
+                    axes[1].set_ylabel("Depth/Time", color='white')
 
-            # SLOT 2: Broken/Irregular 3D (The ObsPy Surgeon)
+            # SLOT 2: Nonstandard 3D (The Enterprise Grid Padder)
             elif mode == 'nonstandard_3d':
-                with st.spinner(f"🛠️ {diag_msg}... Reconstructing with ObsPy"):
+                with st.spinner(f"🛠️ Reconstructing Polygon Grid with Native Padding..."):
                     try:
-                        # Pass the detected endianness to ObsPy ('>' is big, '<' is little)
-                        obspy_endian = '>' if endian == 'big' else '<'
-                        stream = obspy_read(sgy_path, format='SEGY', headertypestr=obspy_endian)
-                        
-                        il_groups = defaultdict(list)
-                        xl_groups = defaultdict(list)
-
-                        # NEW DICTIONARY (Official ObsPy header names)
-                        segyio_to_obspy = {
-                            int(segyio.TraceField.INLINE_3D): 'for_3d_poststack_data_this_field_is_for_in_line_number',
-                            int(segyio.TraceField.CROSSLINE_3D): 'for_3d_poststack_data_this_field_is_for_cross_line_number'
-                        }
-                        il_key = segyio_to_obspy.get(int(det_il_field), 'inline_3d')
-                        xl_key = segyio_to_obspy.get(int(det_xl_field), 'crossline_3d')
-
-                        for tr in stream:
-                            th = tr.stats.segy.trace_header
-                            il_val = getattr(th, il_key, None)
-                            xl_val = getattr(th, xl_key, None)
+                        with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f:
+                            # 1. Grab all headers instantly in bulk
+                            all_il = f.attributes(det_il_field)[:]
+                            all_xl = f.attributes(det_xl_field)[:]
                             
-                            if il_val is not None and xl_val is not None:
-                                il_groups[il_val].append(tr.data.astype(np.float32))
-                                xl_groups[xl_val].append(tr.data.astype(np.float32))
-
-                        mid_il = ilines[len(ilines)//2]
-                        mid_xl = xlines[len(xlines)//2]
-
-                        traces_il = il_groups.get(mid_il, [])
-                        traces_xl = xl_groups.get(mid_xl, [])
-
-                        if traces_il or traces_xl:
-                            nplots = (1 if traces_il else 0) + (1 if traces_xl else 0)
-                            fig, axes = plt.subplots(nplots, 1, figsize=(16, 10 * nplots))
-                            if nplots == 1: axes = [axes]
+                            mid_il = ilines[len(ilines)//2]
+                            mid_xl = xlines[len(xlines)//2]
                             
-                            idx = 0
-                            if traces_il:
-                                data_il = np.array(traces_il).T
-                                vm_il = np.percentile(np.absolute(data_il), 98)
-                                axes[idx].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il)
-                                axes[idx].set_title(f"Recovered 3D Inline: {mid_il}", color='white', fontweight='bold')
-                                axes[idx].tick_params(colors='white')
-                                idx += 1
+                            # 2. Build fast lookup dictionaries for index matching
+                            xl_to_idx = {val: i for i, val in enumerate(xlines)}
+                            il_to_idx = {val: i for i, val in enumerate(ilines)}
+                            
+                            # --- BUILD INLINE SLICE ---
+                            tr_idx_il = np.where(all_il == mid_il)[0]
+                            # Create blank canvas filled with NaN
+                            data_il = np.full((len(samples_list), len(xlines)), np.nan)
+                            
+                            # Drop the traces directly into their correct X coordinates
+                            for idx in tr_idx_il:
+                                xl_val = all_xl[idx]
+                                if xl_val in xl_to_idx:
+                                    data_il[:, xl_to_idx[xl_val]] = f.trace[idx]
+                                    
+                            # --- BUILD CROSSLINE SLICE ---
+                            tr_idx_xl = np.where(all_xl == mid_xl)[0]
+                            data_xl = np.full((len(samples_list), len(ilines)), np.nan)
+                            
+                            for idx in tr_idx_xl:
+                                il_val = all_il[idx]
+                                if il_val in il_to_idx:
+                                    data_xl[:, il_to_idx[il_val]] = f.trace[idx]
+
+                            # Plotting Logic
+                            nplots = (1 if len(tr_idx_il) > 0 else 0) + (1 if len(tr_idx_xl) > 0 else 0)
+                            if nplots > 0:
+                                fig, axes = plt.subplots(nplots, 1, figsize=(16, 10 * nplots))
+                                if nplots == 1: axes = [axes]
                                 
-                            if traces_xl:
-                                data_xl = np.array(traces_xl).T
-                                vm_xl = np.percentile(np.absolute(data_xl), 98)
-                                axes[idx].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl)
-                                axes[idx].set_title(f"Recovered 3D Crossline: {mid_xl}", color='white', fontweight='bold')
-                                axes[idx].tick_params(colors='white')
-                        else:
-                            st.error("Recovery Failed: Could not group traces into a 3D grid.")
+                                plot_idx = 0
+                                if len(tr_idx_il) > 0:
+                                    # Use nanpercentile so the NaNs don't break the color math!
+                                    vm_il = np.nanpercentile(np.absolute(data_il), 98) 
+                                    axes[plot_idx].imshow(data_il, cmap='RdBu', aspect='auto', vmin=-vm_il, vmax=vm_il,
+                                                   extent=[xlines[0], xlines[-1], samples_list[-1], samples_list[0]])
+                                    axes[plot_idx].set_title(f"Reconstructed 3D Inline: {mid_il}", color='white', fontweight='bold')
+                                    axes[plot_idx].tick_params(colors='white')
+                                    axes[plot_idx].set_xlabel("Crosslines", color='white')
+                                    axes[plot_idx].set_ylabel("Depth/Time", color='white')
+                                    plot_idx += 1
+                                    
+                                if len(tr_idx_xl) > 0:
+                                    vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
+                                    axes[plot_idx].imshow(data_xl, cmap='RdBu', aspect='auto', vmin=-vm_xl, vmax=vm_xl,
+                                                   extent=[ilines[0], ilines[-1], samples_list[-1], samples_list[0]])
+                                    axes[plot_idx].set_title(f"Reconstructed 3D Crossline: {mid_xl}", color='white', fontweight='bold')
+                                    axes[plot_idx].tick_params(colors='white')
+                                    axes[plot_idx].set_xlabel("Inlines", color='white')
+                                    axes[plot_idx].set_ylabel("Depth/Time", color='white')
+                            else:
+                                st.error("Recovery Failed: Could not locate traces for the central slices.")
 
-                    except Exception as obspy_err:
-                        st.error(f"ObsPy Recovery Error: {obspy_err}")
+                    except Exception as pad_err:
+                        st.error(f"Grid Padder Recovery Error: {pad_err}")
             
             # SLOT 3: Unreadable File
             elif mode == 'corrupted':
