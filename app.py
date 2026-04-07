@@ -249,7 +249,7 @@ elif st.session_state.page == 'seismic':
                     vm_il = np.percentile(np.absolute(data_il), 98)
                     fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
                                        x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}")
-                    fig_il.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_il.update_traces(zsmooth='best')
                     st.plotly_chart(fig_il, use_container_width=True, height=700)
 
@@ -269,7 +269,7 @@ elif st.session_state.page == 'seismic':
                     vm_xl = np.percentile(np.absolute(data_xl), 98)
                     fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
                                        x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}")
-                    fig_xl.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_xl.update_traces(zsmooth='best')
                     st.plotly_chart(fig_xl, use_container_width=True, height=700)
 
@@ -307,7 +307,7 @@ elif st.session_state.page == 'seismic':
                                 vm_il = np.nanpercentile(np.absolute(data_il), 98) 
                                 fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
                                                    x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}")
-                                fig_il.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                                fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                                 fig_il.update_traces(zsmooth='best')
                                 st.plotly_chart(fig_il, use_container_width=True, height=700)
 
@@ -334,7 +334,7 @@ elif st.session_state.page == 'seismic':
                                 vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
                                 fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
                                                    x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}")
-                                fig_xl.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                                fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                                 fig_xl.update_traces(zsmooth='best')
                                 st.plotly_chart(fig_xl, use_container_width=True, height=700)
 
