@@ -1,6 +1,7 @@
 import streamlit as st
 import lasio
 import segyio
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -165,6 +166,19 @@ def scan_full_geometry(path, endian):
     except Exception as e:
         return None
 
+@st.cache_data
+def get_las_section_df(section_dict):
+    """Safely extracts LAS section items into a clean 4-column Pandas DataFrame."""
+    data = []
+    for item in section_dict:
+        data.append({
+            "Mnemonic": item.mnemonic,
+            "Unit": item.unit if item.unit else "",
+            "Value": str(item.value) if item.value else "",
+            "Description": item.descr if item.descr else ""
+        })
+    return pd.DataFrame(data)
+
 # --- STATE CALLBACKS FOR UI BUTTONS ---
 def set_val(key, val):
     st.session_state[key] = val
@@ -227,15 +241,16 @@ elif st.session_state.page == 'well_log':
             
             if las.version:
                 with st.expander("Version Information (~V)"):
-                    for item in las.version: st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
+                    st.dataframe(get_las_section_df(las.version), hide_index=True, use_container_width=True)
             if las.well:
                 with st.expander("Well Information (~W)", expanded=True):
-                    for item in las.well: st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
+                    st.dataframe(get_las_section_df(las.well), hide_index=True, use_container_width=True)
             if las.params:
                 with st.expander("Parameter Information (~P)"):
-                    for item in las.params: st.markdown(f"**{item.mnemonic}:** {item.value} <span style='color:gray; font-size:14px'><i>({item.descr})</i></span>", unsafe_allow_html=True)
+                    st.dataframe(get_las_section_df(las.params), hide_index=True, use_container_width=True)
             if las.other:
-                with st.expander("Other Information (~O)"): st.text(las.other)
+                with st.expander("Other Information (~O)"): 
+                    st.text(las.other) # Leaving this as text because it's just raw paragraphs!
 
         with st.container(key="las_curves"):
             st.subheader("Well Log Curves")
@@ -325,7 +340,7 @@ elif st.session_state.page == 'seismic':
                         geo_stats = scan_full_geometry(sgy_path, endian)
                         if geo_stats:
                             scan_data = [{"Header Attribute": k, "MIN": v[0], "MAX": v[1]} for k, v in geo_stats.items()]
-                            st.table(scan_data)
+                            st.dataframe(scan_data)
 
         with st.container(key="seismic_plots"):
             st.subheader("SEISMIC PLOT")
@@ -405,7 +420,7 @@ elif st.session_state.page == 'seismic':
                                 vm_il = np.nanpercentile(np.absolute(data_il), 98) 
                                 fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
                                                    x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}",
-                                                   labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
+                                                   labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
                                 fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                                 fig_il.update_traces(zsmooth='best')
                                 st.plotly_chart(fig_il, use_container_width=True, height=700)
