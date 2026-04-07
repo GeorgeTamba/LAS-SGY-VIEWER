@@ -338,12 +338,11 @@ elif st.session_state.page == 'seismic':
                     
                     # --- INLINE SECTION ---
                     st.markdown("### 🎯 Inline Target")
-                    c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
-                    c1.button("⏮️", key="start_il1", on_click=set_val, args=('idx_il_1', 0))
-                    c2.button("◀️", key="prev_il1", on_click=add_val, args=('idx_il_1', -1, 0, len(ilines)-1))
-                    c3.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_1', label_visibility="collapsed")
-                    c4.button("▶️", key="next_il1", on_click=add_val, args=('idx_il_1', 1, 0, len(ilines)-1))
-                    c5.button("⏭️", key="end_il1", on_click=set_val, args=('idx_il_1', len(ilines)-1))
+                    # Using a 7-weight empty column to push everything left
+                    c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                    c1.button("⏮", key="start_il1", on_click=set_val, args=('idx_il_1', 0), use_container_width=True)
+                    c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_1', label_visibility="collapsed")
+                    c3.button("⏭", key="end_il1", on_click=set_val, args=('idx_il_1', len(ilines)-1), use_container_width=True)
 
                     mid_il = ilines[st.session_state.idx_il_1]
                     data_il = f3d.iline[mid_il].T
@@ -359,12 +358,10 @@ elif st.session_state.page == 'seismic':
 
                     # --- CROSSLINE SECTION ---
                     st.markdown("### 🎯 Crossline Target")
-                    c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
-                    c1.button("⏮️", key="start_xl1", on_click=set_val, args=('idx_xl_1', 0))
-                    c2.button("◀️", key="prev_xl1", on_click=add_val, args=('idx_xl_1', -1, 0, len(xlines)-1))
-                    c3.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_1', label_visibility="collapsed")
-                    c4.button("▶️", key="next_xl1", on_click=add_val, args=('idx_xl_1', 1, 0, len(xlines)-1))
-                    c5.button("⏭️", key="end_xl1", on_click=set_val, args=('idx_xl_1', len(xlines)-1))
+                    c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                    c1.button("⏮", key="start_xl1", on_click=set_val, args=('idx_xl_1', 0), use_container_width=True)
+                    c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_1', label_visibility="collapsed")
+                    c3.button("⏭", key="end_xl1", on_click=set_val, args=('idx_xl_1', len(xlines)-1), use_container_width=True)
 
                     mid_xl = xlines[st.session_state.idx_xl_1]
                     data_xl = f3d.xline[mid_xl].T
@@ -391,12 +388,10 @@ elif st.session_state.page == 'seismic':
 
                             # --- INLINE SECTION ---
                             st.markdown("### 🎯 Recovered Inline Target")
-                            c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
-                            c1.button("⏮️", key="start_il2", on_click=set_val, args=('idx_il_2', 0))
-                            c2.button("◀️", key="prev_il2", on_click=add_val, args=('idx_il_2', -1, 0, len(ilines)-1))
-                            c3.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_2', label_visibility="collapsed")
-                            c4.button("▶️", key="next_il2", on_click=add_val, args=('idx_il_2', 1, 0, len(ilines)-1))
-                            c5.button("⏭️", key="end_il2", on_click=set_val, args=('idx_il_2', len(ilines)-1))
+                            c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                            c1.button("⏮", key="start_il2", on_click=set_val, args=('idx_il_2', 0), use_container_width=True)
+                            c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_2', label_visibility="collapsed")
+                            c3.button("⏭", key="end_il2", on_click=set_val, args=('idx_il_2', len(ilines)-1), use_container_width=True)
 
                             mid_il = ilines[st.session_state.idx_il_2]
                             tr_idx_il = np.where(all_il == mid_il)[0]
@@ -419,12 +414,10 @@ elif st.session_state.page == 'seismic':
 
                             # --- CROSSLINE SECTION ---
                             st.markdown("### 🎯 Recovered Crossline Target")
-                            c1, c2, c3, c4, c5 = st.columns([1,1,2,1,1])
-                            c1.button("⏮️", key="start_xl2", on_click=set_val, args=('idx_xl_2', 0))
-                            c2.button("◀️", key="prev_xl2", on_click=add_val, args=('idx_xl_2', -1, 0, len(xlines)-1))
-                            c3.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_2', label_visibility="collapsed")
-                            c4.button("▶️", key="next_xl2", on_click=add_val, args=('idx_xl_2', 1, 0, len(xlines)-1))
-                            c5.button("⏭️", key="end_xl2", on_click=set_val, args=('idx_xl_2', len(xlines)-1))
+                            c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                            c1.button("⏮", key="start_xl2", on_click=set_val, args=('idx_xl_2', 0), use_container_width=True)
+                            c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_2', label_visibility="collapsed")
+                            c3.button("⏭", key="end_xl2", on_click=set_val, args=('idx_xl_2', len(xlines)-1), use_container_width=True)
 
                             mid_xl = xlines[st.session_state.idx_xl_2]
                             tr_idx_xl = np.where(all_xl == mid_xl)[0]
@@ -460,14 +453,12 @@ elif st.session_state.page == 'seismic':
                     
                     st.markdown("### 🎯 Trace Window Navigation (2,000 Traces per page)")
                     st.markdown("**Center Trace Sniper**")
-                    c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
+                    step = window_size // 2 
+                    c1, c2, c3, _ = st.columns([1, 3, 1, 7])
                     
-                    step = window_size // 2 # Move half a window per click for smooth panning
-                    c1.button("⏮️ Start", key="start_tr4", on_click=set_val, args=('idx_trace_4', 0))
-                    c2.button("◀️ Pan Left", key="prev_tr4", on_click=add_val, args=('idx_trace_4', -step, 0, total_traces-1))
-                    c3.number_input("Target", min_value=0, max_value=total_traces-1, key='idx_trace_4', label_visibility="collapsed")
-                    c4.button("Pan Right ▶️", key="next_tr4", on_click=add_val, args=('idx_trace_4', step, 0, total_traces-1))
-                    c5.button("End ⏭️", key="end_tr4", on_click=set_val, args=('idx_trace_4', total_traces-1))
+                    c1.button("⏮", key="start_tr4", on_click=set_val, args=('idx_trace_4', 0), use_container_width=True)
+                    c2.number_input("Target", min_value=0, max_value=total_traces-1, step=step, key='idx_trace_4', label_visibility="collapsed")
+                    c3.button("⏭", key="end_tr4", on_click=set_val, args=('idx_trace_4', total_traces-1), use_container_width=True)
 
                     # Window Extraction Logic (NO Decimation)
                     center_t = st.session_state.idx_trace_4
