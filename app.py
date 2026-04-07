@@ -50,7 +50,9 @@ try:
 except FileNotFoundError:
     st.warning(f"Background image '{img_file}' not found.")
 
-# --- 2. HELPER FUNCTIONS ---
+# --- 2. HELPER FUNCTIONS (NOW WITH CACHING) ---
+
+@st.cache_data
 def detect_endianness(path):
     for endian in ['big', 'little']:
         try:
@@ -63,6 +65,7 @@ def detect_endianness(path):
             continue
     return 'big'
 
+@st.cache_data
 def detect_3d_geometry(path, endian):
     il_field = segyio.TraceField.INLINE_3D
     xl_field = segyio.TraceField.CROSSLINE_3D
@@ -89,6 +92,12 @@ def detect_3d_geometry(path, endian):
                 return ('2d', None, None, None, None, None, "📄 2D Seismic File")
     except Exception:
         return ('corrupted', None, None, None, None, None, "🚫 Heavily Corrupted (Cannot Parse)")
+
+@st.cache_data
+def get_polygon_headers(path, endian, il_field, xl_field):
+    """Caches the massive array of headers so we don't re-read them from disk on every click."""
+    with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+        return f.attributes(il_field)[:], f.attributes(xl_field)[:]
 
 # --- STATE CALLBACKS FOR UI BUTTONS ---
 def set_val(key, val):
@@ -281,8 +290,9 @@ elif st.session_state.page == 'seismic':
                             if 'idx_il_2' not in st.session_state: st.session_state.idx_il_2 = len(ilines) // 2
                             if 'idx_xl_2' not in st.session_state: st.session_state.idx_xl_2 = len(xlines) // 2
                             
-                            all_il = f.attributes(det_il_field)[:]
-                            all_xl = f.attributes(det_xl_field)[:]
+                            # FAST MEMORY ACCESS: Pulling the massive header array from the Cache instead of reading the disk
+                            all_il, all_xl = get_polygon_headers(sgy_path, endian, det_il_field, det_xl_field)
+                            
                             xl_to_idx = {val: i for i, val in enumerate(xlines)}
                             il_to_idx = {val: i for i, val in enumerate(ilines)}
 
@@ -375,7 +385,7 @@ elif st.session_state.page == 'seismic':
                     
                     fig_2d = px.imshow(data_2d, color_continuous_scale='RdBu', range_color=[-vm_2d, vm_2d],
                                        x=x_axis, y=f2d.samples, aspect='auto', title=f"2D Seismic Section: Traces {start_t} to {end_t} (100% Resolution)")
-                    fig_2d.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_2d.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_2d.update_traces(zsmooth='best')
                     st.plotly_chart(fig_2d, use_container_width=True, height=700)
 
