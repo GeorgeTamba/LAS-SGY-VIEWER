@@ -95,9 +95,75 @@ def detect_3d_geometry(path, endian):
 
 @st.cache_data
 def get_polygon_headers(path, endian, il_field, xl_field):
-    """Caches the massive array of headers so we don't re-read them from disk on every click."""
     with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
         return f.attributes(il_field)[:], f.attributes(xl_field)[:]
+
+@st.cache_data
+def get_textual_header(path, endian):
+    try:
+        with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+            return segyio.tools.wrap(f.text[0])
+    except Exception as e:
+        return f"Could not read EBCDIC header: {e}"
+
+@st.cache_data
+def get_binary_header_summary(path, endian):
+    try:
+        with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+            fmt_code = f.bin[segyio.BinField.Format]
+            fmt_dict = {1: "IBM Float (32-bit)", 2: "INT32", 3: "INT16", 5: "IEEE Float (32-bit)", 8: "INT8"}
+            data_format = fmt_dict.get(fmt_code, f"Unknown ({fmt_code})")
+            
+            interval_us = f.bin[segyio.BinField.Interval]
+            interval_ms = interval_us / 1000.0 if interval_us else 0
+            
+            samples = f.bin[segyio.BinField.Samples]
+            time_max = (samples - 1) * interval_ms if samples and interval_ms else 0
+            
+            return {
+                "Byte Order": "Big Endian" if endian == "big" else "Little Endian",
+                "Data Format": data_format,
+                "Max Samples": samples,
+                "Interval": f"{interval_ms} ms",
+                "Time Range": f"0 - {time_max} ms"
+            }
+    except Exception as e:
+        return None
+
+@st.cache_data(show_spinner=False)
+def scan_full_geometry(path, endian):
+    """PHASE B: Scans all trace headers to find absolute MIN and MAX coordinate values."""
+    try:
+        with segyio.open(path, "r", ignore_geometry=True, endian=endian) as f:
+            def get_ext(field):
+                try:
+                    arr = f.attributes(field)[:]
+                    min_v, max_v = np.min(arr), np.max(arr)
+                    
+                    # Smart formatting: Int if integer, 2 decimals if float
+                    fmt_min = f"{int(min_v)}" if min_v == int(min_v) else f"{float(min_v):.2f}"
+                    fmt_max = f"{int(max_v)}" if max_v == int(max_v) else f"{float(max_v):.2f}"
+                    
+                    return fmt_min, fmt_max
+                except:
+                    return "N/A", "N/A"
+            
+            return {
+                "Field Record (fldr)": get_ext(segyio.TraceField.FieldRecord),
+                "Energy Src Point (ESP)": get_ext(segyio.TraceField.EnergySourcePoint),
+                "CDP": get_ext(segyio.TraceField.CDP),
+                "Inline": get_ext(segyio.TraceField.INLINE_3D),
+                "Crossline": get_ext(segyio.TraceField.CROSSLINE_3D),
+                "Offset": get_ext(segyio.TraceField.offset),
+                "Source X": get_ext(segyio.TraceField.SourceX),
+                "Source Y": get_ext(segyio.TraceField.SourceY),
+                "Receiver X": get_ext(segyio.TraceField.GroupX),
+                "Receiver Y": get_ext(segyio.TraceField.GroupY),
+                "CDP X": get_ext(segyio.TraceField.CDP_X),
+                "CDP Y": get_ext(segyio.TraceField.CDP_Y),
+            }
+    except Exception as e:
+        return None
 
 # --- STATE CALLBACKS FOR UI BUTTONS ---
 def set_val(key, val):
@@ -222,18 +288,44 @@ elif st.session_state.page == 'seismic':
 
         with st.container(key="seismic_info"):
             st.subheader("SEISMIC INFORMATIONS")
-            cols = st.columns([2, 1, 1])
-            cols[0].write(f"**Analysis:** {diag_msg}")
+            
+            # --- CONSOLIDATED METRICS DASHBOARD ---
+            bin_summary = get_binary_header_summary(sgy_path, endian) or {}
+            
+            st.write(f"**Analysis:** {diag_msg}")
+            
+            c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
             if mode in ['standard_3d', 'nonstandard_3d']:
-                cols[1].write(f"**Inlines:** {len(ilines)}")
-                cols[2].write(f"**Crosslines:** {len(xlines)}")
+                c1.write(f"**Inlines**<br>{len(ilines)}", unsafe_allow_html=True)
+                c2.write(f"**Crosslines**<br>{len(xlines)}", unsafe_allow_html=True)
             elif mode == '2d':
                 with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f_meta:
-                    cols[1].write(f"**Traces:** {f_meta.tracecount}")
-                    cols[2].write(f"**Samples:** {len(f_meta.samples)}")
+                    c1.write(f"**Traces**<br>{f_meta.tracecount}", unsafe_allow_html=True)
+                    c2.write(f"**Samples**<br>{len(f_meta.samples)}", unsafe_allow_html=True)
             else:
-                cols[1].write("**Traces:** N/A")
-                cols[2].write("**Samples:** N/A")
+                c1.write("**Traces**<br>N/A", unsafe_allow_html=True)
+                c2.write("**Samples**<br>N/A", unsafe_allow_html=True)
+                
+            c3.write(f"**Byte Order**<br>{bin_summary.get('Byte Order', 'N/A')}", unsafe_allow_html=True)
+            c4.write(f"**Data Format**<br>{bin_summary.get('Data Format', 'N/A')}", unsafe_allow_html=True)
+            c5.write(f"**Interval**<br>{bin_summary.get('Interval', 'N/A')}", unsafe_allow_html=True)
+            c6.write(f"**Max Samples**<br>{bin_summary.get('Max Samples', 'N/A')}", unsafe_allow_html=True)
+            c7.write(f"**Time Range**<br>{bin_summary.get('Time Range', 'N/A')}", unsafe_allow_html=True)
+
+            # Raw EBCDIC Textual Header
+            ebcdic_text = get_textual_header(sgy_path, endian)
+            with st.expander("📄 View Raw SEG-Y Textual Header (EBCDIC)"):
+                st.code(ebcdic_text, language="text")
+                
+            # Deep Scan Geometry
+            with st.expander("🔍 Deep Scan: Full Coordinate & Geometry Limits"):
+                st.write("Scan every trace header to extract exact physical boundaries (like the desktop app).")
+                if st.button("Run Deep Trace Scan"):
+                    with st.spinner("Scanning hundreds of thousands of headers..."):
+                        geo_stats = scan_full_geometry(sgy_path, endian)
+                        if geo_stats:
+                            scan_data = [{"Header Attribute": k, "MIN": v[0], "MAX": v[1]} for k, v in geo_stats.items()]
+                            st.table(scan_data)
 
         with st.container(key="seismic_plots"):
             st.subheader("SEISMIC PLOT")
@@ -257,7 +349,8 @@ elif st.session_state.page == 'seismic':
                     data_il = f3d.iline[mid_il].T
                     vm_il = np.percentile(np.absolute(data_il), 98)
                     fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
-                                       x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}")
+                                       x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}",
+                                       labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
                     fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_il.update_traces(zsmooth='best')
                     st.plotly_chart(fig_il, use_container_width=True, height=700)
@@ -277,7 +370,8 @@ elif st.session_state.page == 'seismic':
                     data_xl = f3d.xline[mid_xl].T
                     vm_xl = np.percentile(np.absolute(data_xl), 98)
                     fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
-                                       x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}")
+                                       x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}",
+                                       labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                     fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_xl.update_traces(zsmooth='best')
                     st.plotly_chart(fig_xl, use_container_width=True, height=700)
@@ -290,7 +384,6 @@ elif st.session_state.page == 'seismic':
                             if 'idx_il_2' not in st.session_state: st.session_state.idx_il_2 = len(ilines) // 2
                             if 'idx_xl_2' not in st.session_state: st.session_state.idx_xl_2 = len(xlines) // 2
                             
-                            # FAST MEMORY ACCESS: Pulling the massive header array from the Cache instead of reading the disk
                             all_il, all_xl = get_polygon_headers(sgy_path, endian, det_il_field, det_xl_field)
                             
                             xl_to_idx = {val: i for i, val in enumerate(xlines)}
@@ -316,7 +409,8 @@ elif st.session_state.page == 'seismic':
                             if len(tr_idx_il) > 0:
                                 vm_il = np.nanpercentile(np.absolute(data_il), 98) 
                                 fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
-                                                   x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}")
+                                                   x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}",
+                                                   labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                                 fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                                 fig_il.update_traces(zsmooth='best')
                                 st.plotly_chart(fig_il, use_container_width=True, height=700)
@@ -343,7 +437,8 @@ elif st.session_state.page == 'seismic':
                             if len(tr_idx_xl) > 0:
                                 vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
                                 fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
-                                                   x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}")
+                                                   x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}",
+                                                   labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                                 fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                                 fig_xl.update_traces(zsmooth='best')
                                 st.plotly_chart(fig_xl, use_container_width=True, height=700)
@@ -383,9 +478,17 @@ elif st.session_state.page == 'seismic':
                     vm_2d = np.percentile(np.absolute(data_2d), 98)
                     x_axis = np.arange(start_t, end_t)
                     
-                    fig_2d = px.imshow(data_2d, color_continuous_scale='RdBu', range_color=[-vm_2d, vm_2d],
-                                       x=x_axis, y=f2d.samples, aspect='auto', title=f"2D Seismic Section: Traces {start_t} to {end_t} (100% Resolution)")
-                    fig_2d.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    fig_2d = px.imshow(
+                        data_2d, 
+                        color_continuous_scale='RdBu', 
+                        range_color=[-vm_2d, vm_2d],
+                        x=x_axis, 
+                        y=f2d.samples, 
+                        aspect='auto', 
+                        title=f"2D Seismic Section: Traces {start_t} to {end_t} (100% Resolution)",
+                        labels={"x": "Trace Number", "y": "Time (ms)", "color": "Amplitude"} # <-- ADDED LABELS HERE
+                    )
+                    fig_2d.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_2d.update_traces(zsmooth='best')
                     st.plotly_chart(fig_2d, use_container_width=True, height=700)
 
