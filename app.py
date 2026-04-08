@@ -287,6 +287,72 @@ elif st.session_state.page == 'well_log':
                         st.pyplot(fig)
                         plt.close(fig)
 
+        # --- NEW: 3D WELLBORE TUBE VIEWER ---
+        with st.container(key="las_3d"):
+            st.markdown("---") # Visual Separator
+            st.subheader("☁️ Interactive 3D Wellbore Trajectory")
+            
+            if depth_col and len(available_curves) > 0:
+                # 1. UI: Let the user choose what "paint" to put on the pipe
+                c1, c2 = st.columns([1, 3])
+                target_curve = c1.selectbox("Select Curve to Paint on 3D Tube:", available_curves)
+                
+                if c1.button("Generate 3D Digital Core", use_container_width=True):
+                    with st.spinner(f"Building 3D Tube mapped with {target_curve}..."):
+                        import pyvista as pv
+                        import streamlit.components.v1 as components
+                        
+                        # Drop any empty rows so the line doesn't break
+                        clean_df = df[[depth_col, target_curve]].dropna()
+                        
+                        # 2. THE SCAFFOLDING (X, Y, Z coordinates)
+                        # We use -Z so the well points downward in 3D space!
+                        z_coords = -clean_df[depth_col].values
+                        x_coords = np.zeros_like(z_coords)
+                        y_coords = np.zeros_like(z_coords)
+                        points = np.column_stack((x_coords, y_coords, z_coords))
+
+                        # 3. Build a perfect point-to-point PyVista Line
+                        poly = pv.PolyData(points)
+                        # Connect the dots (Line from pt 0 to 1, 1 to 2, etc.)
+                        lines = np.full((len(points)-1, 3), 2, dtype=np.int_)
+                        lines[:, 1] = np.arange(0, len(points)-1)
+                        lines[:, 2] = np.arange(1, len(points))
+                        poly.lines = lines
+
+                        # 4. THE PAINT
+                        # Attach the selected curve data to the center line
+                        poly.point_data[target_curve] = clean_df[target_curve].values
+
+                        # 5. THE GEOMETRY
+                        # Blow the line up into a cylinder. 
+                        # We dynamically calculate the radius based on depth so it isn't infinitely thin
+                        depth_range = clean_df[depth_col].max() - clean_df[depth_col].min()
+                        dynamic_radius = max(5.0, depth_range * 0.015) 
+                        tube = poly.tube(radius=dynamic_radius)
+
+                        # 6. THE THEATER (Render and Export)
+                        plotter = pv.Plotter(window_size=[800, 600], off_screen=True)
+                        plotter.background_color = "#1E1E1E"
+                        
+                        # We use 'jet' cmap, a classic oil & gas standard for well logs
+                        plotter.add_mesh(tube, scalars=target_curve, cmap="jet",
+                                         show_scalar_bar=True, scalar_bar_args={'title': f"{target_curve} Value"})
+                        
+                        plotter.add_axes(line_width=5, labels_off=False)
+                        plotter.view_isometric()
+
+                        html_file = "temp_well_3d.html"
+                        plotter.export_html(html_file)
+                        plotter.close()
+
+                    # 7. THE DISPLAY
+                    with open(html_file, 'r', encoding='utf-8') as f:
+                        source_html = f.read()
+                        
+                    with c2:
+                        components.html(source_html, width=800, height=600)
+
     except Exception as e:
         st.error(f"Error reading LAS: {e}")
 
