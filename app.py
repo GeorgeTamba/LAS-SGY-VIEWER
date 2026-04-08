@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
+import streamlit.components.v1 as components
 import os
 import base64
 
@@ -285,6 +286,7 @@ elif st.session_state.page == 'well_log':
                         plt.tight_layout()
                         st.pyplot(fig)
                         plt.close(fig)
+
     except Exception as e:
         st.error(f"Error reading LAS: {e}")
 
@@ -351,105 +353,248 @@ elif st.session_state.page == 'seismic':
                     if 'idx_il_1' not in st.session_state: st.session_state.idx_il_1 = len(ilines) // 2
                     if 'idx_xl_1' not in st.session_state: st.session_state.idx_xl_1 = len(xlines) // 2
                     
-                    # --- INLINE SECTION ---
-                    st.markdown("### 🎯 Inline Target")
-                    # Using a 7-weight empty column to push everything left
-                    c1, c2, c3, _ = st.columns([1, 3, 1, 7])
-                    c1.button("⏮", key="start_il1", on_click=set_val, args=('idx_il_1', 0), use_container_width=True)
-                    c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_1', label_visibility="collapsed")
-                    c3.button("⏭", key="end_il1", on_click=set_val, args=('idx_il_1', len(ilines)-1), use_container_width=True)
+                    # --- THE UI TOGGLE ---
+                    st.markdown("### 🎯 Display Engine")
+                    view_engine = st.radio("Select Rendering Mode", 
+                                           ["2D Vector Engine (Plotly)", "3D Cloud Streaming (PyVista)"], 
+                                           horizontal=True, label_visibility="collapsed")
+                    st.markdown("---")
+                    
+                    if view_engine == "2D Vector Engine (Plotly)":
+                        # --- INLINE SECTION (Plotly) ---
+                        st.markdown("### 🎯 Inline Target")
+                        c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                        c1.button("⏮️", key="start_il1", on_click=set_val, args=('idx_il_1', 0), use_container_width=True)
+                        c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_1', label_visibility="collapsed")
+                        c3.button("⏭️", key="end_il1", on_click=set_val, args=('idx_il_1', len(ilines)-1), use_container_width=True)
 
-                    mid_il = ilines[st.session_state.idx_il_1]
-                    data_il = f3d.iline[mid_il].T
-                    vm_il = np.percentile(np.absolute(data_il), 98)
-                    fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
-                                       x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}",
-                                       labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
-                    fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                    fig_il.update_traces(zsmooth='best')
-                    st.plotly_chart(fig_il, use_container_width=True, height=700)
+                        mid_il = ilines[st.session_state.idx_il_1]
+                        data_il = f3d.iline[mid_il].T
+                        vm_il = np.percentile(np.absolute(data_il), 98)
+                        fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
+                                           x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}",
+                                           labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
+                        fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                        fig_il.update_traces(zsmooth='best')
+                        st.plotly_chart(fig_il, use_container_width=True, height=700)
 
-                    st.markdown("---") # Visual Separator
+                        st.markdown("---")
 
-                    # --- CROSSLINE SECTION ---
-                    st.markdown("### 🎯 Crossline Target")
-                    c1, c2, c3, _ = st.columns([1, 3, 1, 7])
-                    c1.button("⏮", key="start_xl1", on_click=set_val, args=('idx_xl_1', 0), use_container_width=True)
-                    c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_1', label_visibility="collapsed")
-                    c3.button("⏭", key="end_xl1", on_click=set_val, args=('idx_xl_1', len(xlines)-1), use_container_width=True)
+                        # --- CROSSLINE SECTION (Plotly) ---
+                        st.markdown("### 🎯 Crossline Target")
+                        c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                        c1.button("⏮️", key="start_xl1", on_click=set_val, args=('idx_xl_1', 0), use_container_width=True)
+                        c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_1', label_visibility="collapsed")
+                        c3.button("⏭️", key="end_xl1", on_click=set_val, args=('idx_xl_1', len(xlines)-1), use_container_width=True)
 
-                    mid_xl = xlines[st.session_state.idx_xl_1]
-                    data_xl = f3d.xline[mid_xl].T
-                    vm_xl = np.percentile(np.absolute(data_xl), 98)
-                    fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
-                                       x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}",
-                                       labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
-                    fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                    fig_xl.update_traces(zsmooth='best')
-                    st.plotly_chart(fig_xl, use_container_width=True, height=700)
+                        mid_xl = xlines[st.session_state.idx_xl_1]
+                        data_xl = f3d.xline[mid_xl].T
+                        vm_xl = np.percentile(np.absolute(data_xl), 98)
+                        fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
+                                           x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}",
+                                           labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
+                        fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                        fig_xl.update_traces(zsmooth='best')
+                        st.plotly_chart(fig_xl, use_container_width=True, height=700)
+                        
+                    else:
+                        # --- 3D PYVISTA ENGINE (NATIVE EXPORT) ---
+                        import pyvista as pv
+                        
+                        st.markdown("### ☁️ Interactive 3D Intersection")
+                        
+                        tc1, tc2 = st.columns(2)
+                        tc1.number_input("Target Inline (X-Axis)", min_value=0, max_value=len(ilines)-1, key='idx_il_1')
+                        tc2.number_input("Target Crossline (Y-Axis)", min_value=0, max_value=len(xlines)-1, key='idx_xl_1')
+                        
+                        mid_il = ilines[st.session_state.idx_il_1]
+                        mid_xl = xlines[st.session_state.idx_xl_1]
+
+                        # --- THE VAULT (Extract & Close) ---
+                        with st.spinner("Extracting Slices from Disk..."):
+                            with segyio.open(sgy_path, "r", ignore_geometry=False, endian=endian) as f3d:
+                                data_il = np.copy(f3d.iline[mid_il])
+                                data_xl = np.copy(f3d.xline[mid_xl])
+
+                        # --- THE RENDERER (Build & Save) ---
+                        with st.spinner("Building 3D Mesh and Exporting Engine..."):
+                            vm = np.percentile(np.absolute(data_il), 98)
+
+                            y_grid_il, z_grid_il = np.meshgrid(xlines, samples_list, indexing='ij')
+                            x_grid_il = np.full_like(y_grid_il, mid_il)
+                            
+                            x_grid_xl, z_grid_xl = np.meshgrid(ilines, samples_list, indexing='ij')
+                            y_grid_xl = np.full_like(x_grid_xl, mid_xl)
+
+                            mesh_il = pv.StructuredGrid(x_grid_il, y_grid_il, z_grid_il)
+                            mesh_xl = pv.StructuredGrid(x_grid_xl, y_grid_xl, z_grid_xl)
+
+                            mesh_il.point_data["Amplitude"] = data_il.flatten()
+                            mesh_xl.point_data["Amplitude"] = data_xl.flatten()
+
+                            # Create Plotter in off-screen mode
+                            plotter = pv.Plotter(window_size=[800, 600], off_screen=True)
+                            plotter.background_color = "#1E1E1E"
+                            plotter.set_scale(zscale=-1)
+                            
+                            plotter.add_mesh(mesh_il, scalars="Amplitude", cmap="RdBu", clim=[-vm, vm], show_scalar_bar=False)
+                            plotter.add_mesh(mesh_xl, scalars="Amplitude", cmap="RdBu", clim=[-vm, vm], show_scalar_bar=True)
+                            
+                            plotter.add_axes(line_width=5, labels_off=False)
+                            plotter.view_isometric()
+
+                            # --- THE BULLETPROOF FIX ---
+                            # We export the 3D scene to a lightweight vtk.js HTML file
+                            html_file = "temp_seismic_3d.html"
+                            plotter.export_html(html_file)
+                            plotter.close() # Free up the Server RAM immediately!
+
+                        # --- THE DISPLAY ---
+                        # Streamlit just reads the text file and displays it safely
+                        with open(html_file, 'r', encoding='utf-8') as f:
+                            source_html = f.read()
+                            
+                        components.html(source_html, width=800, height=600)
 
             # --- SLOT 2: Nonstandard 3D (Enterprise Grid Padder) ---
             elif mode == 'nonstandard_3d':
                 with st.spinner(f"🛠️ Reconstructing Polygon Grid with Native Padding..."):
                     try:
-                        with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f:
-                            if 'idx_il_2' not in st.session_state: st.session_state.idx_il_2 = len(ilines) // 2
-                            if 'idx_xl_2' not in st.session_state: st.session_state.idx_xl_2 = len(xlines) // 2
-                            
-                            all_il, all_xl = get_polygon_headers(sgy_path, endian, det_il_field, det_xl_field)
-                            
-                            xl_to_idx = {val: i for i, val in enumerate(xlines)}
-                            il_to_idx = {val: i for i, val in enumerate(ilines)}
+                        if 'idx_il_2' not in st.session_state: st.session_state.idx_il_2 = len(ilines) // 2
+                        if 'idx_xl_2' not in st.session_state: st.session_state.idx_xl_2 = len(xlines) // 2
+                        
+                        # --- THE UI TOGGLE ---
+                        st.markdown("### 🎯 Display Engine")
+                        view_engine_2 = st.radio("Select Rendering Mode", 
+                                               ["2D Vector Engine (Plotly)", "3D Cloud Streaming (PyVista)"], 
+                                               horizontal=True, label_visibility="collapsed", key="toggle_slot2")
+                        st.markdown("---")
 
-                            # --- INLINE SECTION ---
-                            st.markdown("### 🎯 Recovered Inline Target")
-                            c1, c2, c3, _ = st.columns([1, 3, 1, 7])
-                            c1.button("⏮", key="start_il2", on_click=set_val, args=('idx_il_2', 0), use_container_width=True)
-                            c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_2', label_visibility="collapsed")
-                            c3.button("⏭", key="end_il2", on_click=set_val, args=('idx_il_2', len(ilines)-1), use_container_width=True)
+                        # Cache pull for headers
+                        all_il, all_xl = get_polygon_headers(sgy_path, endian, det_il_field, det_xl_field)
+                        xl_to_idx = {val: i for i, val in enumerate(xlines)}
+                        il_to_idx = {val: i for i, val in enumerate(ilines)}
 
-                            mid_il = ilines[st.session_state.idx_il_2]
-                            tr_idx_il = np.where(all_il == mid_il)[0]
-                            data_il = np.full((len(samples_list), len(xlines)), np.nan)
-                            for idx in tr_idx_il:
-                                xl_val = all_xl[idx]
-                                if xl_val in xl_to_idx:
-                                    data_il[:, xl_to_idx[xl_val]] = f.trace[idx]
+                        if view_engine_2 == "2D Vector Engine (Plotly)":
+                            with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f:
+                                # --- INLINE SECTION ---
+                                st.markdown("### 🎯 Recovered Inline Target")
+                                c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                                c1.button("⏮️", key="start_il2", on_click=set_val, args=('idx_il_2', 0), use_container_width=True)
+                                c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_2', label_visibility="collapsed")
+                                c3.button("⏭️", key="end_il2", on_click=set_val, args=('idx_il_2', len(ilines)-1), use_container_width=True)
 
-                            if len(tr_idx_il) > 0:
-                                vm_il = np.nanpercentile(np.absolute(data_il), 98) 
-                                fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
-                                                   x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}",
-                                                   labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
-                                fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                                fig_il.update_traces(zsmooth='best')
-                                st.plotly_chart(fig_il, use_container_width=True, height=700)
+                                mid_il = ilines[st.session_state.idx_il_2]
+                                tr_idx_il = np.where(all_il == mid_il)[0]
+                                data_il = np.full((len(samples_list), len(xlines)), np.nan)
+                                for idx in tr_idx_il:
+                                    xl_val = all_xl[idx]
+                                    if xl_val in xl_to_idx:
+                                        data_il[:, xl_to_idx[xl_val]] = f.trace[idx]
 
-                            st.markdown("---") # Visual Separator
+                                if len(tr_idx_il) > 0:
+                                    vm_il = np.nanpercentile(np.absolute(data_il), 98) 
+                                    fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
+                                                       x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}",
+                                                       labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
+                                    fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                                    fig_il.update_traces(zsmooth='best')
+                                    st.plotly_chart(fig_il, use_container_width=True, height=700)
 
-                            # --- CROSSLINE SECTION ---
-                            st.markdown("### 🎯 Recovered Crossline Target")
-                            c1, c2, c3, _ = st.columns([1, 3, 1, 7])
-                            c1.button("⏮", key="start_xl2", on_click=set_val, args=('idx_xl_2', 0), use_container_width=True)
-                            c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_2', label_visibility="collapsed")
-                            c3.button("⏭", key="end_xl2", on_click=set_val, args=('idx_xl_2', len(xlines)-1), use_container_width=True)
+                                st.markdown("---") # Visual Separator
 
-                            mid_xl = xlines[st.session_state.idx_xl_2]
-                            tr_idx_xl = np.where(all_xl == mid_xl)[0]
-                            data_xl = np.full((len(samples_list), len(ilines)), np.nan)
-                            for idx in tr_idx_xl:
-                                il_val = all_il[idx]
-                                if il_val in il_to_idx:
-                                    data_xl[:, il_to_idx[il_val]] = f.trace[idx]
+                                # --- CROSSLINE SECTION ---
+                                st.markdown("### 🎯 Recovered Crossline Target")
+                                c1, c2, c3, _ = st.columns([1, 3, 1, 7])
+                                c1.button("⏮️", key="start_xl2", on_click=set_val, args=('idx_xl_2', 0), use_container_width=True)
+                                c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_2', label_visibility="collapsed")
+                                c3.button("⏭️", key="end_xl2", on_click=set_val, args=('idx_xl_2', len(xlines)-1), use_container_width=True)
+
+                                mid_xl = xlines[st.session_state.idx_xl_2]
+                                tr_idx_xl = np.where(all_xl == mid_xl)[0]
+                                data_xl = np.full((len(samples_list), len(ilines)), np.nan)
+                                for idx in tr_idx_xl:
+                                    il_val = all_il[idx]
+                                    if il_val in il_to_idx:
+                                        data_xl[:, il_to_idx[il_val]] = f.trace[idx]
+                                        
+                                if len(tr_idx_xl) > 0:
+                                    vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
+                                    fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
+                                                       x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}",
+                                                       labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
+                                    fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                                    fig_xl.update_traces(zsmooth='best')
+                                    st.plotly_chart(fig_xl, use_container_width=True, height=700)
                                     
-                            if len(tr_idx_xl) > 0:
-                                vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
-                                fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
-                                                   x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}",
-                                                   labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
-                                fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                                fig_xl.update_traces(zsmooth='best')
-                                st.plotly_chart(fig_xl, use_container_width=True, height=700)
+                        else:
+                            # --- 3D PYVISTA ENGINE (GRID PADDER) ---
+                            import pyvista as pv
+                            import streamlit.components.v1 as components
+                            
+                            st.markdown("### ☁️ Interactive 3D Intersection (Irregular Grid)")
+                            
+                            tc1, tc2 = st.columns(2)
+                            tc1.number_input("Target Inline (X-Axis)", min_value=0, max_value=len(ilines)-1, key='idx_il_2')
+                            tc2.number_input("Target Crossline (Y-Axis)", min_value=0, max_value=len(xlines)-1, key='idx_xl_2')
+                            
+                            mid_il = ilines[st.session_state.idx_il_2]
+                            mid_xl = xlines[st.session_state.idx_xl_2]
+
+                            # --- THE VAULT (Extract & Pad Traces) ---
+                            with st.spinner("Extracting and Padding Irregular Geometry..."):
+                                with segyio.open(sgy_path, "r", ignore_geometry=True, endian=endian) as f:
+                                    # Create shape (traces, samples) to perfectly map to PyVista Meshgrid
+                                    data_il_3d = np.full((len(xlines), len(samples_list)), np.nan)
+                                    tr_idx_il = np.where(all_il == mid_il)[0]
+                                    for idx in tr_idx_il:
+                                        xl_val = all_xl[idx]
+                                        if xl_val in xl_to_idx:
+                                            data_il_3d[xl_to_idx[xl_val], :] = f.trace[idx]
+
+                                    data_xl_3d = np.full((len(ilines), len(samples_list)), np.nan)
+                                    tr_idx_xl = np.where(all_xl == mid_xl)[0]
+                                    for idx in tr_idx_xl:
+                                        il_val = all_il[idx]
+                                        if il_val in il_to_idx:
+                                            data_xl_3d[il_to_idx[il_val], :] = f.trace[idx]
+
+                            # --- THE RENDERER (Build & Export) ---
+                            with st.spinner("Building 3D Mesh and Exporting HTML Engine..."):
+                                vm = np.nanpercentile(np.absolute(data_il_3d), 98)
+
+                                y_grid_il, z_grid_il = np.meshgrid(xlines, samples_list, indexing='ij')
+                                x_grid_il = np.full_like(y_grid_il, mid_il)
+                                
+                                x_grid_xl, z_grid_xl = np.meshgrid(ilines, samples_list, indexing='ij')
+                                y_grid_xl = np.full_like(x_grid_xl, mid_xl)
+
+                                mesh_il = pv.StructuredGrid(x_grid_il, y_grid_il, z_grid_il)
+                                mesh_xl = pv.StructuredGrid(x_grid_xl, y_grid_xl, z_grid_xl)
+
+                                mesh_il.point_data["Amplitude"] = data_il_3d.flatten()
+                                mesh_xl.point_data["Amplitude"] = data_xl_3d.flatten()
+
+                                plotter = pv.Plotter(window_size=[800, 600], off_screen=True)
+                                plotter.background_color = "#1E1E1E"
+                                plotter.set_scale(zscale=-1)
+                                
+                                # CRITICAL: nan_opacity=0.0 makes the padded "empty" space totally invisible!
+                                plotter.add_mesh(mesh_il, scalars="Amplitude", cmap="RdBu", clim=[-vm, vm], show_scalar_bar=False, nan_opacity=0.0)
+                                plotter.add_mesh(mesh_xl, scalars="Amplitude", cmap="RdBu", clim=[-vm, vm], show_scalar_bar=True, nan_opacity=0.0)
+                                
+                                plotter.add_axes(line_width=5, labels_off=False)
+                                plotter.view_isometric()
+
+                                html_file = "temp_seismic_3d_slot2.html"
+                                plotter.export_html(html_file)
+                                plotter.close() 
+
+                            # --- THE DISPLAY ---
+                            with open(html_file, 'r', encoding='utf-8') as f:
+                                source_html = f.read()
+                                
+                            components.html(source_html, width=800, height=600)
 
                     except Exception as pad_err:
                         st.error(f"Grid Padder Recovery Error: {pad_err}")
