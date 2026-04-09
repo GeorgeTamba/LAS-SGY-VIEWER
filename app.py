@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
+from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
 import os
@@ -257,6 +258,7 @@ elif st.session_state.page == 'well_log':
         with st.container(key="las_curves"):
             st.subheader("Well Log Curves")
             depth_col = next((c for c in las.keys() if c.upper() in ['DEPT', 'DEPTH']), None)
+            
             if depth_col:
                 available_curves = [c for c in las.keys() if c != depth_col]
                 num_curves = len(available_curves)
@@ -264,29 +266,102 @@ elif st.session_state.page == 'well_log':
                 num_rows = (num_curves + cols_per_row - 1) // cols_per_row
                 depth_unit = las.curves[depth_col].unit if depth_col in las.curves else "m"
 
+                # --- NEW: MASTER COLOR PICKER FOR BASE CURVES ---
+                default_colors = [
+                    '#1f77b4', '#d62728', '#2ca02c', '#ff7f0e', '#9467bd', 
+                    '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f'
+                ]
+                
+                single_curve_colors = {}
+                with st.expander("🎨 Customize Individual Curve Colors", expanded=False):
+                    color_cols = st.columns(5)
+                    for idx, curve in enumerate(available_curves):
+                        with color_cols[idx % 5]:
+                            single_curve_colors[curve] = st.color_picker(
+                                f"{curve}", 
+                                value=default_colors[idx % len(default_colors)], 
+                                key=f"base_color_{curve}"
+                            )
+                
+                st.write("") # Quick spacer
+
+                # --- NEW: PLOTLY SUBPLOT ENGINE ---
                 for r in range(num_rows):
                     start_idx = r * cols_per_row
                     end_idx = min(start_idx + cols_per_row, num_curves)
                     row_curves = available_curves[start_idx:end_idx]
+                    
+                    # We keep your brilliant column-ratio math to prevent stretched plots!
                     display_cols = st.columns([len(row_curves), cols_per_row - len(row_curves) + 0.1])
+                    
                     with display_cols[0]:
-                        row_width = len(row_curves) * 3.5 
-                        fig, axes = plt.subplots(1, len(row_curves), figsize=(row_width, 10), sharey=True)
-                        if len(row_curves) == 1: axes = [axes]
-                        for i, curve in enumerate(row_curves):
-                            axes[i].plot(df[curve], df[depth_col], color="#0028B6", lw=1.5)
-                            axes[i].set_title(curve, fontweight='bold', color='white', pad=15)
-                            axes[i].grid(True, linestyle='-', alpha=0.5, color='#000000')
-                            if 'RES' in curve.upper() and df[curve].min() > 0: axes[i].set_xscale('log')
-                        axes[0].set_ylabel(f"Depth ({depth_unit})", color='white', fontweight='bold')
-                        for ax in axes:
-                            ax.tick_params(colors='white')
-                            ax.set_facecolor('white') 
-                        plt.gca().invert_yaxis()
-                        fig.patch.set_alpha(0) 
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        plt.close(fig)
+                        # 1. Create synced subplots for this specific row
+                        fig_row = make_subplots(
+                            rows=1, cols=len(row_curves), 
+                            shared_yaxes=True, 
+                            horizontal_spacing=0.05, # Keep the tracks tight
+                            subplot_titles=row_curves
+                        )
+                        
+                        # 2. Draw each curve into its respective column
+                        for i, curve in enumerate(row_curves):  
+                            c_color = single_curve_colors[curve]
+                            
+                            fig_row.add_trace(go.Scatter(
+                                x=df[curve],
+                                y=df[depth_col],
+                                name=curve,
+                                mode='lines',
+                                line=dict(color=c_color, width=1.5)
+                            ), row=1, col=i+1)
+                            
+                            # Logarithmic scale check for Resistivity
+                            is_log = 'RES' in curve.upper() and df[curve].min() > 0
+                            
+                            fig_row.update_xaxes(
+                                type='log' if is_log else 'linear',
+                                showgrid=True, gridcolor='#E0E0E0', color='white',
+                                row=1, col=i+1
+                            )
+
+                        fig_row.update_yaxes(
+                            title_text=f"Depth ({depth_unit})" if i == 0 else "", 
+                            autorange='reversed', 
+                            showgrid=True, 
+                            gridcolor='#E0E0E0', 
+                            color='white',
+
+                            showspikes=True,       # Force the line to appear
+                            spikecolor='#000000',  # Pure Black
+                            spikethickness=1.0,    # Slightly thicker than a default line
+                            spikedash='dash',     # 'solid', 'dot', or 'dash'
+                            spikemode='across'
+                        )
+
+                        fig_row.update_yaxes(
+                            title_text=f"Depth ({depth_unit})", 
+                            row=1, col=1
+                        )
+
+                        # 4. Global UI Styling
+                        fig_row.update_layout(
+                            plot_bgcolor='#FFFFFF',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            height=800, # Stretch them tall so they look like real well logs
+                            showlegend=False, # Titles are at the top, no legend needed
+                            margin=dict(t=50, b=50, l=60, r=20),
+                            hovermode='y unified' # Cross-track tooltip sync!
+                        )
+                        
+                        # 5. Force the subplot titles to be white AND push them up
+                        for annotation in fig_row['layout']['annotations']: 
+                            annotation['font'] = dict(color='white', size=14, weight='bold')
+                            
+                            # UPGRADE 2: Push the titles exactly 15 pixels UP away from the plot line
+                            annotation['yshift'] = 15 
+
+                        # Render the chart
+                        st.plotly_chart(fig_row, use_container_width=True, config={'displayModeBar': True}, key=f"plotly_base_row_{r}")
 
                         # --- NEW: MULTI-TRACK CUSTOM STACKED VIEW ---
                 st.markdown("---")
@@ -343,7 +418,13 @@ elif st.session_state.page == 'well_log':
                                     title=f"Depth ({depth_unit})", 
                                     autorange='reversed', 
                                     gridcolor='#E0E0E0',
-                                    color='white'
+                                    color='white',
+
+                                    showspikes=True,       # Force the line to appear
+                                    spikecolor='#000000',  # Pure Black
+                                    spikethickness=1.0,    # Slightly thicker than a default line
+                                    spikedash='dash',     # 'solid', 'dot', or 'dash'
+                                    spikemode='across'
                                 ),
                                 'xaxis': dict(
                                     side='top',
