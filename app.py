@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit.components.v1 as components
 import os
 import base64
@@ -286,6 +287,103 @@ elif st.session_state.page == 'well_log':
                         plt.tight_layout()
                         st.pyplot(fig)
                         plt.close(fig)
+
+                        # --- NEW: MULTI-TRACK CUSTOM STACKED VIEW ---
+                st.markdown("---")
+                st.markdown("### 🎯 Advanced Multi-Track Analysis")
+                st.markdown("Build up to 3 custom stacked tracks side-by-side for cross-correlation.")
+                
+                # Create 3 columns for our tracks
+                track_cols = st.columns(3)
+                
+                # Loop through the columns to build them dynamically
+                for i, col in enumerate(track_cols):
+                    with col:
+                        st.markdown(f"#### Track {i+1}")
+                        
+                        stacked_curves = st.multiselect(
+                            f"Select curves:", 
+                            available_curves, 
+                            key=f"custom_track_{i}"
+                        )
+                        
+                        if stacked_curves:
+                            import plotly.graph_objects as go
+                            
+                            fig_stack = go.Figure()
+                            
+                            # Our Enterprise default palette
+                            default_colors = [
+                                '#1f77b4', '#d62728', '#2ca02c', '#ff7f0e', '#9467bd', 
+                                '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f'
+                            ]
+                            
+                            # --- NEW: DYNAMIC COLOR PICKER UI ---
+                            # --- NEW: COMPACT DYNAMIC COLOR PICKER UI ---
+                            curve_colors = {}
+                            with st.expander("🎨 Customize Curve Colors", expanded=False):
+                                # UPGRADE: Increased to 5 columns for a much tighter, horizontal grid
+                                num_cols = 5
+                                color_cols = st.columns(num_cols)
+                                
+                                for j, curve in enumerate(stacked_curves):
+                                    default_c = default_colors[j % len(default_colors)]
+                                    
+                                    with color_cols[j % num_cols]:
+                                        # UPGRADE: Dropped the word "Color" to keep the label ultra-clean
+                                        curve_colors[curve] = st.color_picker(
+                                            f"{curve}", 
+                                            value=default_c, 
+                                            key=f"color_picker_track_{i}_{curve}"
+                                        )
+
+                            # --- THE PLOTLY ENGINE ---
+                            layout_updates = {
+                                'yaxis': dict(
+                                    title=f"Depth ({depth_unit})", 
+                                    autorange='reversed', 
+                                    gridcolor='#E0E0E0',
+                                    color='white'
+                                ),
+                                'xaxis': dict(
+                                    side='top',
+                                    showgrid=True, 
+                                    gridcolor='#E0E0E0',
+                                    color='white',
+                                    tickfont=dict(color='white')
+                                ),
+                                'plot_bgcolor': '#FFFFFF', 
+                                'paper_bgcolor': 'rgba(0,0,0,0)', 
+                                'margin': dict(t=60, b=150, l=50, r=20), 
+                                'showlegend': True, 
+                                'legend': dict(
+                                    orientation="h",
+                                    yanchor="top",
+                                    y=-0.05, 
+                                    xanchor="center",
+                                    x=0.5,
+                                    font=dict(color='white')
+                                ),
+                                'hovermode': 'y unified' 
+                            }
+
+                            for j, curve in enumerate(stacked_curves):
+                                # CRITICAL: We now use the user's chosen color from our dictionary!
+                                c_color = curve_colors[curve]
+                                
+                                fig_stack.add_trace(go.Scatter(
+                                    x=df[curve],
+                                    y=df[depth_col],
+                                    name=curve,
+                                    mode='lines',
+                                    line=dict(color=c_color, width=1.5)
+                                ))
+
+                            fig_stack.update_layout(**layout_updates)
+                            
+                            st.plotly_chart(fig_stack, use_container_width=True, height=800, config={'displayModeBar': True}, key=f"plotly_track_{i}")
+                        else:
+                            st.info(f"Select curves to populate Track {i+1}")
 
         # --- NEW: 3D WELLBORE TUBE VIEWER ---
         with st.container(key="las_3d"):
