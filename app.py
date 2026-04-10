@@ -628,15 +628,32 @@ elif st.session_state.page == 'seismic':
                         mid_il = ilines[st.session_state.idx_il_1]
                         data_il = f3d.iline[mid_il].T
                         
-                        # --- UPGRADED: DYNAMIC PERCENTILE GAIN ---
+                        # --- NEW: CALCULATE GLOBAL TRACE NUMBERS (1-BASED) ---
+                        # Math: (Inline Index * Total Crosslines) + Crossline Index + 1
+                        il_idx = st.session_state.idx_il_1
+                        trace_nums_1d = (il_idx * len(xlines)) + np.arange(len(xlines)) + 1
+                        trace_nums_2d = np.tile(trace_nums_1d, (len(samples_list), 1)) # Stretch to fit image
+                        # -----------------------------------------------------
+
                         vm_il = np.percentile(np.absolute(data_il), gain_il1)
-                        
-                        # --- UPGRADED: DYNAMIC COLOR SCALE ---
                         fig_il = px.imshow(data_il, color_continuous_scale=seismic_colors[cmap_il1], range_color=[-vm_il, vm_il],
                                            x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}",
                                            labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
                         fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                        fig_il.update_traces(zsmooth='best')
+                        
+                        # --- UPGRADED: ADD CUSTOMDATA FOR TRACE ID ---
+                        fig_il.update_traces(
+                            customdata=trace_nums_2d,
+                            zsmooth='best',
+                            hovertemplate=(
+                                f"<b>Inline:</b> {mid_il}<br>" +
+                                "<b>Crossline:</b> %{x}<br>" +
+                                "<b>Global Trace (idx):</b> %{customdata:.0f}<br>" +
+                                "<b>Time:</b> %{y} ms<br>" +
+                                "<b>Amplitude:</b> %{z:.2f}<br>" +
+                                "<extra></extra>"
+                            )
+                        )
                         st.plotly_chart(fig_il, use_container_width=True, height=700)
 
                         st.markdown("---")
@@ -656,13 +673,31 @@ elif st.session_state.page == 'seismic':
                         mid_xl = xlines[st.session_state.idx_xl_1]
                         data_xl = f3d.xline[mid_xl].T
                         
-                        vm_xl = np.percentile(np.absolute(data_xl), gain_xl1)
+                        # --- NEW: CALCULATE GLOBAL TRACE NUMBERS (1-BASED) ---
+                        xl_idx = st.session_state.idx_xl_1
+                        trace_nums_1d = (np.arange(len(ilines)) * len(xlines)) + xl_idx + 1
+                        trace_nums_2d = np.tile(trace_nums_1d, (len(samples_list), 1))
+                        # -----------------------------------------------------
                         
+                        vm_xl = np.percentile(np.absolute(data_xl), gain_xl1)
                         fig_xl = px.imshow(data_xl, color_continuous_scale=seismic_colors[cmap_xl1], range_color=[-vm_xl, vm_xl],
                                            x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}",
                                            labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                         fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                        fig_xl.update_traces(zsmooth='best')
+                        
+                        # --- UPGRADED: ADD CUSTOMDATA FOR TRACE ID ---
+                        fig_xl.update_traces(
+                            customdata=trace_nums_2d,
+                            zsmooth='best',
+                            hovertemplate=(
+                                f"<b>Crossline:</b> {mid_xl}<br>" +
+                                "<b>Inline:</b> %{x}<br>" +
+                                "<b>Global Trace (idx):</b> %{customdata:.0f}<br>" +
+                                "<b>Time:</b> %{y} ms<br>" +
+                                "<b>Amplitude:</b> %{z:.2f}<br>" +
+                                "<extra></extra>"
+                            )
+                        )
                         st.plotly_chart(fig_xl, use_container_width=True, height=700)
                         
                     else:
@@ -759,11 +794,18 @@ elif st.session_state.page == 'seismic':
 
                                 mid_il = ilines[st.session_state.idx_il_2]
                                 tr_idx_il = np.where(all_il == mid_il)[0]
+                                
                                 data_il = np.full((len(samples_list), len(xlines)), np.nan)
+                                trace_nums_1d = np.full(len(xlines), np.nan) # NEW: Empty array for traces
+                                
                                 for idx in tr_idx_il:
                                     xl_val = all_xl[idx]
                                     if xl_val in xl_to_idx:
-                                        data_il[:, xl_to_idx[xl_val]] = f.trace[idx]
+                                        x_pos = xl_to_idx[xl_val]
+                                        data_il[:, x_pos] = f.trace[idx]
+                                        trace_nums_1d[x_pos] = idx + 1 # Save the raw Trace Number!
+
+                                trace_nums_2d = np.tile(trace_nums_1d, (len(samples_list), 1))
 
                                 if len(tr_idx_il) > 0:
                                     vm_il = np.nanpercentile(np.absolute(data_il), gain_il2) 
@@ -771,7 +813,20 @@ elif st.session_state.page == 'seismic':
                                                        x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}",
                                                        labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
                                     fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                                    fig_il.update_traces(zsmooth='best')
+                                    
+                                    # --- UPGRADED: ADD CUSTOMDATA FOR TRACE ID ---
+                                    fig_il.update_traces(
+                                        customdata=trace_nums_2d,
+                                        zsmooth='best',
+                                        hovertemplate=(
+                                            f"<b>Inline:</b> {mid_il}<br>" +
+                                            "<b>Crossline:</b> %{x}<br>" +
+                                            "<b>Global Trace (idx):</b> %{customdata:.0f}<br>" +
+                                            "<b>Time:</b> %{y} ms<br>" +
+                                            "<b>Amplitude:</b> %{z:.2f}<br>" +
+                                            "<extra></extra>"
+                                        )
+                                    )
                                     st.plotly_chart(fig_il, use_container_width=True, height=700)
 
                                 st.markdown("---") # Visual Separator
@@ -790,11 +845,18 @@ elif st.session_state.page == 'seismic':
 
                                 mid_xl = xlines[st.session_state.idx_xl_2]
                                 tr_idx_xl = np.where(all_xl == mid_xl)[0]
+                                
                                 data_xl = np.full((len(samples_list), len(ilines)), np.nan)
+                                trace_nums_1d = np.full(len(ilines), np.nan) # NEW: Empty array for traces
+                                
                                 for idx in tr_idx_xl:
                                     il_val = all_il[idx]
                                     if il_val in il_to_idx:
-                                        data_xl[:, il_to_idx[il_val]] = f.trace[idx]
+                                        x_pos = il_to_idx[il_val]
+                                        data_xl[:, x_pos] = f.trace[idx]
+                                        trace_nums_1d[x_pos] = idx + 1 # Save the raw Trace Number!
+                                        
+                                trace_nums_2d = np.tile(trace_nums_1d, (len(samples_list), 1))
                                         
                                 if len(tr_idx_xl) > 0:
                                     vm_xl = np.nanpercentile(np.absolute(data_xl), gain_xl2)
@@ -802,7 +864,20 @@ elif st.session_state.page == 'seismic':
                                                        x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}",
                                                        labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                                     fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                                    fig_xl.update_traces(zsmooth='best')
+                                    
+                                    # --- UPGRADED: ADD CUSTOMDATA FOR TRACE ID ---
+                                    fig_xl.update_traces(
+                                        customdata=trace_nums_2d,
+                                        zsmooth='best',
+                                        hovertemplate=(
+                                            f"<b>Crossline:</b> {mid_xl}<br>" +
+                                            "<b>Inline:</b> %{x}<br>" +
+                                            "<b>Global Trace (idx):</b> %{customdata:.0f}<br>" +
+                                            "<b>Time:</b> %{y} ms<br>" +
+                                            "<b>Amplitude:</b> %{z:.2f}<br>" +
+                                            "<extra></extra>"
+                                        )
+                                    )
                                     st.plotly_chart(fig_xl, use_container_width=True, height=700)
                                     
                         else:
@@ -914,6 +989,12 @@ elif st.session_state.page == 'seismic':
                     vm_2d = np.percentile(np.absolute(data_2d), gain_tr4)
                     x_axis = np.arange(start_t, end_t)
                     
+                    # --- NEW: CALCULATE GLOBAL TRACE NUMBERS (1-BASED) ---
+                    # For 2D, the trace number is just the X-axis + 1!
+                    trace_nums_1d = x_axis + 1 
+                    trace_nums_2d = np.tile(trace_nums_1d, (len(f2d.samples), 1))
+                    # -----------------------------------------------------
+                    
                     fig_2d = px.imshow(
                         data_2d, 
                         color_continuous_scale=seismic_colors[cmap_tr4], 
@@ -924,8 +1005,19 @@ elif st.session_state.page == 'seismic':
                         title=f"2D Seismic Section: Traces {start_t} to {end_t} (100% Resolution)",
                         labels={"x": "Trace Number", "y": "Time (ms)", "color": "Amplitude"} 
                     )
-                    fig_2d.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-                    fig_2d.update_traces(zsmooth='best')
+                    fig_2d.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+                    
+                    # --- UPGRADED: ADD CUSTOMDATA FOR TRACE ID ---
+                    fig_2d.update_traces(
+                        customdata=trace_nums_2d,
+                        zsmooth='best',
+                        hovertemplate=(
+                            "<b>Global Trace (idx):</b> %{customdata:.0f}<br>" +
+                            "<b>Time:</b> %{y} ms<br>" +
+                            "<b>Amplitude:</b> %{z:.2f}<br>" +
+                            "<extra></extra>"
+                        )
+                    )
                     st.plotly_chart(fig_2d, use_container_width=True, height=700)
 
     except Exception as e:

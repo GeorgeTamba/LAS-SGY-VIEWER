@@ -1,5 +1,6 @@
 # Ignore my custom virtual environment name
 myenv/
+myvenv/
 
 # Standard patterns to catch other common names
 venv/
