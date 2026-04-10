@@ -591,6 +591,13 @@ elif st.session_state.page == 'seismic':
 
         with st.container(key="seismic_plots"):
             st.subheader("SEISMIC PLOT")
+
+            seismic_colors = {
+                "Red-Blue": "RdBu",
+                "Grey Scale": "gray",
+                "Red-Black": ["black", "white", "red"],
+                "Blue-Yellow": ["blue", "white", "yellow"]
+            }
             
             # --- SLOT 1: Standard 3D ---
             if mode == 'standard_3d':
@@ -613,10 +620,19 @@ elif st.session_state.page == 'seismic':
                         c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_1', label_visibility="collapsed")
                         c3.button("⏭️", key="end_il1", on_click=set_val, args=('idx_il_1', len(ilines)-1), use_container_width=True)
 
+                        # --- NEW: COLOR & GAIN UI ---
+                        ui1, ui2, _ = st.columns([3, 4, 5])
+                        cmap_il1 = ui1.selectbox("Color Palette", list(seismic_colors.keys()), key="cmap_il1")
+                        gain_il1 = ui2.slider("Amplitude Thickness (Clip %)", min_value=50, max_value=100, value=98, step=1, key="gain_il1")
+
                         mid_il = ilines[st.session_state.idx_il_1]
                         data_il = f3d.iline[mid_il].T
-                        vm_il = np.percentile(np.absolute(data_il), 98)
-                        fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
+                        
+                        # --- UPGRADED: DYNAMIC PERCENTILE GAIN ---
+                        vm_il = np.percentile(np.absolute(data_il), gain_il1)
+                        
+                        # --- UPGRADED: DYNAMIC COLOR SCALE ---
+                        fig_il = px.imshow(data_il, color_continuous_scale=seismic_colors[cmap_il1], range_color=[-vm_il, vm_il],
                                            x=xlines, y=samples_list, aspect='auto', title=f"3D Inline: {mid_il}",
                                            labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
                         fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
@@ -632,10 +648,17 @@ elif st.session_state.page == 'seismic':
                         c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_1', label_visibility="collapsed")
                         c3.button("⏭️", key="end_xl1", on_click=set_val, args=('idx_xl_1', len(xlines)-1), use_container_width=True)
 
+                        # --- NEW: COLOR & GAIN UI ---
+                        ui1, ui2, _ = st.columns([3, 4, 5])
+                        cmap_xl1 = ui1.selectbox("Color Palette", list(seismic_colors.keys()), key="cmap_xl1")
+                        gain_xl1 = ui2.slider("Amplitude Thickness (Clip %)", min_value=50, max_value=100, value=98, step=1, key="gain_xl1")
+
                         mid_xl = xlines[st.session_state.idx_xl_1]
                         data_xl = f3d.xline[mid_xl].T
-                        vm_xl = np.percentile(np.absolute(data_xl), 98)
-                        fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
+                        
+                        vm_xl = np.percentile(np.absolute(data_xl), gain_xl1)
+                        
+                        fig_xl = px.imshow(data_xl, color_continuous_scale=seismic_colors[cmap_xl1], range_color=[-vm_xl, vm_xl],
                                            x=ilines, y=samples_list, aspect='auto', title=f"3D Crossline: {mid_xl}",
                                            labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                         fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
@@ -729,6 +752,11 @@ elif st.session_state.page == 'seismic':
                                 c2.number_input("IL", min_value=0, max_value=len(ilines)-1, key='idx_il_2', label_visibility="collapsed")
                                 c3.button("⏭️", key="end_il2", on_click=set_val, args=('idx_il_2', len(ilines)-1), use_container_width=True)
 
+                                # --- NEW: COLOR & GAIN UI ---
+                                ui1, ui2, _ = st.columns([3, 4, 5])
+                                cmap_il2 = ui1.selectbox("Color Palette", list(seismic_colors.keys()), key="cmap_il2")
+                                gain_il2 = ui2.slider("Amplitude Thickness (Clip %)", min_value=50, max_value=100, value=98, step=1, key="gain_il2")
+
                                 mid_il = ilines[st.session_state.idx_il_2]
                                 tr_idx_il = np.where(all_il == mid_il)[0]
                                 data_il = np.full((len(samples_list), len(xlines)), np.nan)
@@ -738,8 +766,8 @@ elif st.session_state.page == 'seismic':
                                         data_il[:, xl_to_idx[xl_val]] = f.trace[idx]
 
                                 if len(tr_idx_il) > 0:
-                                    vm_il = np.nanpercentile(np.absolute(data_il), 98) 
-                                    fig_il = px.imshow(data_il, color_continuous_scale='RdBu', range_color=[-vm_il, vm_il],
+                                    vm_il = np.nanpercentile(np.absolute(data_il), gain_il2) 
+                                    fig_il = px.imshow(data_il, color_continuous_scale=seismic_colors[cmap_il2], range_color=[-vm_il, vm_il],
                                                        x=xlines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Inline: {mid_il}",
                                                        labels={"x": "Crossline", "y": "Time (ms)", "color": "Amplitude"})
                                     fig_il.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
@@ -755,6 +783,11 @@ elif st.session_state.page == 'seismic':
                                 c2.number_input("XL", min_value=0, max_value=len(xlines)-1, key='idx_xl_2', label_visibility="collapsed")
                                 c3.button("⏭️", key="end_xl2", on_click=set_val, args=('idx_xl_2', len(xlines)-1), use_container_width=True)
 
+                                # --- NEW: COLOR & GAIN UI ---
+                                ui1, ui2, _ = st.columns([3, 4, 5])
+                                cmap_xl2 = ui1.selectbox("Color Palette", list(seismic_colors.keys()), key="cmap_xl2")
+                                gain_xl2 = ui2.slider("Amplitude Thickness (Clip %)", min_value=50, max_value=100, value=98, step=1, key="gain_xl2")
+
                                 mid_xl = xlines[st.session_state.idx_xl_2]
                                 tr_idx_xl = np.where(all_xl == mid_xl)[0]
                                 data_xl = np.full((len(samples_list), len(ilines)), np.nan)
@@ -764,8 +797,8 @@ elif st.session_state.page == 'seismic':
                                         data_xl[:, il_to_idx[il_val]] = f.trace[idx]
                                         
                                 if len(tr_idx_xl) > 0:
-                                    vm_xl = np.nanpercentile(np.absolute(data_xl), 98)
-                                    fig_xl = px.imshow(data_xl, color_continuous_scale='RdBu', range_color=[-vm_xl, vm_xl],
+                                    vm_xl = np.nanpercentile(np.absolute(data_xl), gain_xl2)
+                                    fig_xl = px.imshow(data_xl, color_continuous_scale=seismic_colors[cmap_xl2], range_color=[-vm_xl, vm_xl],
                                                        x=ilines, y=samples_list, aspect='auto', title=f"Reconstructed 3D Crossline: {mid_xl}",
                                                        labels={"x": "Inline", "y": "Time (ms)", "color": "Amplitude"})
                                     fig_xl.update_layout(plot_bgcolor='#E0E0E0', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
@@ -865,24 +898,31 @@ elif st.session_state.page == 'seismic':
                     c2.number_input("Target", min_value=0, max_value=total_traces-1, step=step, key='idx_trace_4', label_visibility="collapsed")
                     c3.button("⏭", key="end_tr4", on_click=set_val, args=('idx_trace_4', total_traces-1), use_container_width=True)
 
+                    # --- NEW: COLOR & GAIN UI ---
+                    ui1, ui2, _ = st.columns([3, 4, 5])
+                    cmap_tr4 = ui1.selectbox("Color Palette", list(seismic_colors.keys()), key="cmap_tr4")
+                    gain_tr4 = ui2.slider("Amplitude Thickness (Clip %)", min_value=50, max_value=100, value=98, step=1, key="gain_tr4")
+
                     # Window Extraction Logic (NO Decimation)
                     center_t = st.session_state.idx_trace_4
                     start_t = max(0, center_t - (window_size // 2))
                     end_t = min(total_traces, center_t + (window_size // 2))
                     
                     data_2d = segyio.tools.collect(f2d.trace[start_t:end_t]).T
-                    vm_2d = np.percentile(np.absolute(data_2d), 98)
+                    
+                    # Apply Dynamic Gain here!
+                    vm_2d = np.percentile(np.absolute(data_2d), gain_tr4)
                     x_axis = np.arange(start_t, end_t)
                     
                     fig_2d = px.imshow(
                         data_2d, 
-                        color_continuous_scale='RdBu', 
+                        color_continuous_scale=seismic_colors[cmap_tr4], 
                         range_color=[-vm_2d, vm_2d],
                         x=x_axis, 
                         y=f2d.samples, 
                         aspect='auto', 
                         title=f"2D Seismic Section: Traces {start_t} to {end_t} (100% Resolution)",
-                        labels={"x": "Trace Number", "y": "Time (ms)", "color": "Amplitude"} # <-- ADDED LABELS HERE
+                        labels={"x": "Trace Number", "y": "Time (ms)", "color": "Amplitude"} 
                     )
                     fig_2d.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white')
                     fig_2d.update_traces(zsmooth='best')
