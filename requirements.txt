@@ -1,5 +1,8 @@
 streamlit
 lasio
 segyio
+pandas
 numpy
 matplotlib
+plotly
+pyvista
