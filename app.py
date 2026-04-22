@@ -593,7 +593,13 @@ elif st.session_state.page == 'seismic':
             st.subheader("SEISMIC PLOT")
 
             seismic_colors = {
-                "Red-Blue": "RdBu",
+                # --- THE NEW SOFT PALETTE ---
+                "Red-Blue (Soft)": [
+                    [0.0, 'rgb(40, 100, 255)'],   # Bright, soft blue
+                    [0.5, 'rgb(255, 255, 255)'],  # Pure white zero-crossing
+                    [1.0, 'rgb(255, 60, 60)']     # Bright, soft red
+                ],
+                "Red-Blue (Dark)": "RdBu",        # Kept the old one just in case!
                 "Grey Scale": "gray",
                 "Red-Black": ["black", "white", "red"],
                 "Blue-Yellow": ["blue", "white", "yellow"]
@@ -985,8 +991,11 @@ elif st.session_state.page == 'seismic':
                     
                     data_2d = segyio.tools.collect(f2d.trace[start_t:end_t]).T
                     
-                    # Apply Dynamic Gain here!
-                    vm_2d = np.percentile(np.absolute(data_2d), gain_tr4)
+                    # --- THE FIX: ADD THE * 1.5 MULTIPLIER ---
+                    base_vm_2d = np.percentile(np.absolute(data_2d), gain_tr4)
+                    vm_2d = base_vm_2d * 1.5  # This stretches the colorbar so it doesn't clip so harshly!
+                    # -----------------------------------------
+                    
                     x_axis = np.arange(start_t, end_t)
                     
                     # --- NEW: CALCULATE GLOBAL TRACE NUMBERS (1-BASED) ---
