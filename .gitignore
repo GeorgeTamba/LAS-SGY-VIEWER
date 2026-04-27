@@ -10,3 +10,6 @@ env/
 # Ignore large data files
 *.sgy
 *.las
+
+# Ignore PyVista temporary 3D render files
+temp_*.html
